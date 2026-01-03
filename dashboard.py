@@ -13,6 +13,15 @@ import warnings
 from datetime import datetime
 import sys
 import os
+import tempfile
+import json
+
+# Try to import Google Cloud Storage (optional - for Streamlit Cloud)
+try:
+    from google.cloud import storage
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
 
 # Add current directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -84,23 +93,68 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data
-def load_data():
-    """Load and cache the cleaned import data"""
-    data_path = 'data/imports_2024_2025_cleaned.csv'
-    
-    if not os.path.exists(data_path):
-        st.error(f"Data file not found: {data_path}")
+def load_data_from_gcs():
+    """Load data from Google Cloud Storage"""
+    try:
+        # Get GCS configuration from Streamlit secrets
+        if 'gcp' not in st.secrets:
+            st.error("GCP configuration not found in Streamlit secrets. Please configure GCS access.")
+            st.stop()
+        
+        gcp_config = st.secrets['gcp']
+        bucket_name = gcp_config.get('bucket_name', 'freight-import-data')
+        file_name = gcp_config.get('file_name', 'imports_2024_2025_cleaned.csv')
+        
+        # Get credentials from secrets
+        if 'credentials' not in gcp_config:
+            st.error("GCP credentials not found in Streamlit secrets.")
+            st.stop()
+        
+        # Create credentials dict from secrets
+        credentials_dict = dict(gcp_config['credentials'])
+        
+        # Create temporary file for credentials
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as creds_file:
+            json.dump(credentials_dict, creds_file)
+            creds_path = creds_file.name
+        
+        try:
+            # Initialize GCS client with credentials
+            client = storage.Client.from_service_account_json(creds_path)
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob(file_name)
+            
+            # Show loading progress
+            with st.spinner(f"Loading data from Google Cloud Storage ({file_name})..."):
+                # Download to temporary file
+                with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
+                    blob.download_to_filename(tmp_file.name)
+                    tmp_path = tmp_file.name
+                
+                # Load data from temporary file
+                return load_data_from_file(tmp_path)
+        finally:
+            # Clean up credentials file
+            if os.path.exists(creds_path):
+                os.unlink(creds_path)
+            # Clean up data file after loading
+            if 'tmp_path' in locals() and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+                
+    except Exception as e:
+        st.error(f"Error loading data from Google Cloud Storage: {str(e)}")
+        st.error("Please check your GCS configuration in Streamlit secrets.")
         st.stop()
-    
-    # Read in chunks to handle large dataset
+
+def load_data_from_file(file_path):
+    """Load and process data from a CSV file"""
     chunk_size = 100000
     chunks = []
     total_rows = 0
     batch_size = 5
     
     try:
-        for i, chunk in enumerate(pd.read_csv(data_path, chunksize=chunk_size), 1):
+        for i, chunk in enumerate(pd.read_csv(file_path, chunksize=chunk_size), 1):
             chunks.append(chunk)
             total_rows += len(chunk)
             
@@ -133,8 +187,48 @@ def load_data():
         return df
     
     except Exception as e:
-        st.error(f"Error loading data: {str(e)}")
+        st.error(f"Error loading data from file: {str(e)}")
         st.stop()
+
+@st.cache_data
+def load_data():
+    """Load and cache the cleaned import data
+    Tries local file first, then Google Cloud Storage if available
+    """
+    # Try local file first (for local development)
+    data_path = 'data/imports_2024_2025_cleaned.csv'
+    
+    if os.path.exists(data_path):
+        return load_data_from_file(data_path)
+    
+    # If local file not found, try Google Cloud Storage
+    if GCS_AVAILABLE:
+        try:
+            return load_data_from_gcs()
+        except Exception as e:
+            st.warning(f"Could not load from GCS: {str(e)}")
+            st.info("Falling back to local file...")
+    
+    # If both fail, show error
+    st.error(f"Data file not found: {data_path}")
+    st.info("""
+    **For local development:**
+    - Ensure `data/imports_2024_2025_cleaned.csv` exists in your project directory
+    
+    **For Streamlit Cloud:**
+    - Configure Google Cloud Storage in Streamlit secrets (see GCS_SETUP_GUIDE.md)
+    - Or upload the data file using the file uploader below
+    """)
+    
+    # Offer file uploader as fallback
+    uploaded_file = st.file_uploader("Upload cleaned data file (CSV)", type=['csv'])
+    if uploaded_file is not None:
+        with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = tmp_file.name
+        return load_data_from_file(tmp_path)
+    
+    st.stop()
 
 def main():
     """Main dashboard application"""
