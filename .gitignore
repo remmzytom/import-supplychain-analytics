@@ -26,9 +26,10 @@ wheels/
 # Streamlit
 .streamlit/secrets.toml
 
-# Data files (optional - uncomment if you don't want to commit data)
-# data/
-# *.csv
+# Data files (too large for GitHub - use external storage)
+data/
+*.csv
+!data/.gitkeep
 
 # Logs
 logs/
