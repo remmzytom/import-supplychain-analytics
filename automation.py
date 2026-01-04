@@ -41,7 +41,7 @@ EMAIL_FROM = os.getenv('EMAIL_FROM')
 EMAIL_TO = os.getenv('EMAIL_TO')
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')  # App password for Gmail
 SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
+SMTP_PORT = int(os.getenv('SMTP_PORT') or '587')  # Handle empty string
 
 # Logging setup
 log_file = Path('automation.log')
