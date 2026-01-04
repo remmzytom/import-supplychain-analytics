@@ -44,15 +44,19 @@ SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
 
 # Logging setup
+log_file = Path('automation.log')
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('automation.log'),
+        logging.FileHandler(log_file),
         logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Ensure log file exists
+log_file.touch(exist_ok=True)
 
 
 def check_for_new_data():
@@ -247,6 +251,9 @@ def run_automation():
     start_time = datetime.now()
     success = False
     message = ""
+    
+    # Ensure DATA_DIR exists
+    DATA_DIR.mkdir(exist_ok=True)
     
     try:
         logger.info("=" * 60)

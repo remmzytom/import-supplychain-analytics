@@ -51,15 +51,8 @@ jobs:
         name: automation-logs
         path: automation.log
     
-    - name: Notify on failure
-      if: failure()
-      uses: actions/github-script@v6
-      with:
-        script: |
-          github.rest.issues.create({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            title: ' Automated Pipeline Failed',
-            body: 'The weekly data pipeline update failed. Please check the logs.'
-          })
+    # Note: Issue creation requires write permissions
+    # If you want this, go to Settings → Actions → General → Workflow permissions
+    # and enable "Read and write permissions"
+    # For now, we'll skip this to avoid permission errors
 
