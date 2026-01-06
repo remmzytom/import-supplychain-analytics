@@ -87,12 +87,9 @@ def check_for_new_data():
         days_since_modification = (datetime.now(last_modified.tzinfo) - last_modified).days
         logger.info(f"Days since last modification: {days_since_modification}")
         
-        if days_since_modification > CHECK_INTERVAL_DAYS:
-            logger.info("No new data detected (file not modified recently)")
-            return False, last_modified, None
-        
-        # Method 2: Check latest date in existing data (if available)
+        # Method 2: Check if data exists in GCS
         latest_data_date = None
+        data_exists_in_gcs = False
         try:
             # Try to get latest date from GCS
             client = storage.Client()
@@ -100,6 +97,7 @@ def check_for_new_data():
             blob = bucket.blob(GCS_FILE_NAME)
             
             if blob.exists():
+                data_exists_in_gcs = True
                 # Download a sample to check latest date
                 with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
                     blob.download_to_filename(tmp_file.name)
@@ -119,10 +117,20 @@ def check_for_new_data():
             logger.warning(f"Could not check existing data date: {e}")
             # If we can't check existing data, assume we need to update
             latest_data_date = None
+            data_exists_in_gcs = False
+        
+        # Always process if no data exists in GCS (initial setup)
+        if not data_exists_in_gcs:
+            logger.info("No existing data in GCS. Processing initial data upload...")
+            return True, last_modified, latest_data_date
         
         # If file was modified recently, we likely have new data
-        logger.info("New data detected (file modified recently)")
-        return True, last_modified, latest_data_date
+        if days_since_modification <= CHECK_INTERVAL_DAYS:
+            logger.info("New data detected (file modified recently)")
+            return True, last_modified, latest_data_date
+        else:
+            logger.info("No new data detected (file not modified recently and data already exists)")
+            return False, last_modified, latest_data_date
         
     except Exception as e:
         logger.error(f"Error checking for new data: {e}")
