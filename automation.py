@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 import tempfile
 from google.cloud import storage
+from google.api_core import exceptions as google_exceptions
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -267,13 +268,35 @@ def upload_to_gcs(file_path):
         
         # Check if credentials file exists (from GitHub Actions)
         creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+        service_account_email = None
+        
         if creds_path and os.path.exists(creds_path):
             logger.info(f"Using credentials from: {creds_path}")
+            # Read service account email from credentials file
+            try:
+                import json
+                with open(creds_path, 'r') as f:
+                    creds_data = json.load(f)
+                    service_account_email = creds_data.get('client_email', 'Unknown')
+                    logger.info(f"Service account email: {service_account_email}")
+            except Exception as creds_e:
+                logger.warning(f"Could not read service account email: {creds_e}")
+            
             client = storage.Client.from_service_account_json(creds_path)
         else:
             # Try default credentials (for local or if env var not set)
             logger.info("Using default credentials")
-            client = storage.Client()
+            try:
+                client = storage.Client()
+                # Try to get the service account email from default credentials
+                try:
+                    service_account_email = client.get_service_account_email()
+                    logger.info(f"Default service account email: {service_account_email}")
+                except:
+                    pass
+            except Exception as default_e:
+                logger.error(f"Failed to initialize default credentials: {default_e}")
+                raise
         
         logger.info(f"Creating bucket reference for: '{bucket_name}'")
         bucket = client.bucket(bucket_name)
@@ -281,16 +304,63 @@ def upload_to_gcs(file_path):
         blob = bucket.blob(file_name)
         
         logger.info(f"Starting upload to gs://{bucket_name}/{file_name}")
-        blob.upload_from_filename(file_path)
-        logger.info(f"Successfully uploaded to gs://{bucket_name}/{file_name}")
+        try:
+            blob.upload_from_filename(file_path)
+            logger.info(f"Successfully uploaded to gs://{bucket_name}/{file_name}")
+            return True
+        except google_exceptions.Forbidden as perm_error:
+            error_msg = f"""
+{'=' * 60}
+PERMISSION DENIED ERROR
+{'=' * 60}
+The service account '{service_account_email or 'Unknown'}' does not have permission 
+to upload objects to bucket '{bucket_name}'.
+
+Required permission: storage.objects.create
+
+To fix this:
+1. Go to Google Cloud Console → Storage → Browser
+2. Select bucket: {bucket_name}
+3. Click "Permissions" tab
+4. Click "Grant Access"
+5. Add Principal: {service_account_email or 'YOUR_SERVICE_ACCOUNT_EMAIL'}
+6. Add Role: Storage Object Creator (roles/storage.objectCreator)
+   OR Storage Admin (roles/storage.admin) for full access
+7. Click "Save"
+
+If you don't know the service account email, check your GitHub secret 
+'GCP_SERVICE_ACCOUNT_KEY' - it should contain a 'client_email' field.
+
+Original error: {str(perm_error)}
+{'=' * 60}
+            """
+            logger.error(error_msg)
+            raise Exception(error_msg.strip()) from perm_error
         
-        return True
+    except google_exceptions.Forbidden as perm_error:
+        # Catch permission errors that might occur earlier
+        error_msg = f"""
+{'=' * 60}
+PERMISSION DENIED ERROR
+{'=' * 60}
+Service account '{service_account_email or 'Unknown'}' lacks permissions 
+for bucket '{bucket_name}'.
+
+Please grant 'Storage Object Creator' role to: {service_account_email or 'YOUR_SERVICE_ACCOUNT_EMAIL'}
+
+Original error: {str(perm_error)}
+{'=' * 60}
+        """
+        logger.error(error_msg)
+        raise Exception(error_msg.strip()) from perm_error
+        
     except Exception as e:
         logger.error("=" * 60)
         logger.error("GCS UPLOAD ERROR")
         logger.error("=" * 60)
         logger.error(f"Error type: {type(e).__name__}")
         logger.error(f"Error message: {str(e)}")
+        logger.error(f"Service account: {service_account_email or 'Unknown'}")
         logger.error(f"Bucket name used: '{GCS_BUCKET_NAME}' (repr: {repr(GCS_BUCKET_NAME)})")
         logger.error(f"File name used: '{GCS_FILE_NAME}'")
         logger.error(f"Credentials path: {os.getenv('GOOGLE_APPLICATION_CREDENTIALS', 'Not set')}")
