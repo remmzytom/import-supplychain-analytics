@@ -92,7 +92,14 @@ def check_for_new_data():
         data_exists_in_gcs = False
         try:
             # Try to get latest date from GCS
-            client = storage.Client()
+            # Check if credentials file exists (from GitHub Actions)
+            creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            if creds_path and os.path.exists(creds_path):
+                client = storage.Client.from_service_account_json(creds_path)
+            else:
+                client = storage.Client()
+            
+            logger.info(f"Checking GCS bucket: {GCS_BUCKET_NAME}")
             bucket = client.bucket(GCS_BUCKET_NAME)
             blob = bucket.blob(GCS_FILE_NAME)
             
