@@ -322,9 +322,16 @@ def run_automation():
         
         # Step 5: Analyze data
         logger.info("Analyzing data...")
-        analysis_result = step3_analyze_data(input_path=str(temp_cleaned_file))
-        if analysis_result is None:
-            raise Exception("Data analysis failed")
+        try:
+            analysis_result = step3_analyze_data(input_path=str(temp_cleaned_file))
+            if analysis_result is None:
+                logger.warning("Analysis returned None, but continuing...")
+            else:
+                logger.info("Data analysis completed successfully")
+        except Exception as analysis_error:
+            logger.warning(f"Analysis step had an error: {analysis_error}")
+            logger.warning("Continuing with upload despite analysis error...")
+            # Don't fail the pipeline if analysis has issues - we still want to upload data
         
         # Step 6: Upload to GCS
         try:
