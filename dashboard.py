@@ -142,7 +142,10 @@ def load_data_from_gcs():
             
             # Show loading progress
             file_size = blob.size
-            st.info(f"📊 File size: {file_size / (1024*1024):.2f} MB")
+            if file_size is not None:
+                st.info(f"📊 File size: {file_size / (1024*1024):.2f} MB")
+            else:
+                st.info("📊 File size: Unknown")
             
             with st.spinner(f"⬇️ Downloading `{file_name}` from Google Cloud Storage..."):
                 # Download to temporary file
@@ -250,6 +253,7 @@ def load_data_from_file(file_path):
 def load_data():
     """Load and cache the cleaned import data
     Tries local file first, then Google Cloud Storage if available
+    NOTE: This function cannot contain widget commands (like st.file_uploader)
     """
     # Try local file first (for local development)
     data_path = 'data/imports_2024_2025_cleaned.csv'
@@ -264,11 +268,25 @@ def load_data():
             if gcs_data is not None:
                 return gcs_data
         except Exception as e:
-            st.warning(f"Could not load from GCS: {str(e)}")
-            st.info("Falling back to file uploader...")
+            # Don't show widgets here - return None and let main() handle it
+            return None
     
-    # If both fail, show error
-    st.error(f"Data file not found: {data_path}")
+    # If both fail, return None (main() will handle the error and file uploader)
+    return None
+
+def load_data_with_fallback():
+    """Load data with fallback to file uploader
+    This function handles widgets and should not be cached
+    """
+    # Try to load data (cached function)
+    df = load_data_with_fallback()
+    
+    # If data loaded successfully, return it
+    if df is not None:
+        return df
+    
+    # If data not found, show error and offer file uploader
+    st.error("❌ **Data file not found**")
     st.info("""
     **For local development:**
     - Ensure `data/imports_2024_2025_cleaned.csv` exists in your project directory
@@ -278,7 +296,7 @@ def load_data():
     - Or upload the data file using the file uploader below
     """)
     
-    # Offer file uploader as fallback
+    # Offer file uploader as fallback (this is outside cached function)
     uploaded_file = st.file_uploader("Upload cleaned data file (CSV)", type=['csv'])
     if uploaded_file is not None:
         with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
@@ -296,7 +314,7 @@ def main():
     st.markdown("---")
     
     # Load data
-    df = load_data()
+    df = load_data_with_fallback()
     
     # Sidebar filters
     st.sidebar.header("🔍 Filters")
