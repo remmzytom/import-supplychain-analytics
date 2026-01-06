@@ -164,7 +164,13 @@ def download_and_merge_data():
         # Try to load existing data from GCS
         existing_df = None
         try:
-            client = storage.Client()
+            # Check if credentials file exists (from GitHub Actions)
+            creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            if creds_path and os.path.exists(creds_path):
+                client = storage.Client.from_service_account_json(creds_path)
+            else:
+                client = storage.Client()
+            
             bucket = client.bucket(GCS_BUCKET_NAME)
             blob = bucket.blob(GCS_FILE_NAME)
             
