@@ -33,7 +33,7 @@ from run_pipeline import (
 # Configuration
 ABS_DATA_URL = "https://aueprod01ckanstg.blob.core.windows.net/public-catalogue/public/82d5fb9d-61ae-4ddd-873b-5c9501b6b743/imports.csv.zip"
 
-# Get and clean bucket name from environment
+# Get bucket name from environment and clean it
 _raw_bucket_name = os.getenv('GCS_BUCKET_NAME', 'freight-import-data')
 GCS_BUCKET_NAME = _raw_bucket_name.strip('"').strip("'").strip()  # Remove quotes and whitespace
 GCS_FILE_NAME = os.getenv('GCS_FILE_NAME', 'imports_2024_2025_cleaned.csv').strip('"').strip("'").strip()
@@ -67,20 +67,25 @@ logger.info("CONFIGURATION")
 logger.info("=" * 60)
 logger.info(f"GCS_BUCKET_NAME: '{GCS_BUCKET_NAME}' (length: {len(GCS_BUCKET_NAME)}, raw: '{_raw_bucket_name}')")
 logger.info(f"GCS_FILE_NAME: '{GCS_FILE_NAME}'")
-logger.info(f"Bucket name starts with: '{GCS_BUCKET_NAME[0] if GCS_BUCKET_NAME else 'EMPTY'}'")
-logger.info(f"Bucket name ends with: '{GCS_BUCKET_NAME[-1] if GCS_BUCKET_NAME else 'EMPTY'}'")
-
-# Validate bucket name format
 if GCS_BUCKET_NAME:
-    if not (GCS_BUCKET_NAME[0].isalnum() and GCS_BUCKET_NAME[-1].isalnum()):
-        error_msg = f"INVALID BUCKET NAME: '{GCS_BUCKET_NAME}' does not meet GCS requirements!"
-        error_msg += f"\n  - Must start with letter/number (starts with: '{GCS_BUCKET_NAME[0]}')"
-        error_msg += f"\n  - Must end with letter/number (ends with: '{GCS_BUCKET_NAME[-1]}')"
-        logger.error(error_msg)
-        raise ValueError(error_msg)
+    logger.info(f"Bucket name starts with: '{GCS_BUCKET_NAME[0]}' (isalnum: {GCS_BUCKET_NAME[0].isalnum()})")
+    logger.info(f"Bucket name ends with: '{GCS_BUCKET_NAME[-1]}' (isalnum: {GCS_BUCKET_NAME[-1].isalnum()})")
 else:
     logger.error("GCS_BUCKET_NAME is empty!")
-    raise ValueError("GCS_BUCKET_NAME environment variable is not set or is empty")
+
+# Validate bucket name format
+if not GCS_BUCKET_NAME:
+    error_msg = "GCS_BUCKET_NAME environment variable is not set or is empty!"
+    logger.error(error_msg)
+    raise ValueError(error_msg)
+
+if not (GCS_BUCKET_NAME[0].isalnum() and GCS_BUCKET_NAME[-1].isalnum()):
+    error_msg = f"INVALID BUCKET NAME: '{GCS_BUCKET_NAME}' does not meet GCS requirements!"
+    error_msg += f"\n  - Must start with letter/number (starts with: '{GCS_BUCKET_NAME[0]}' - isalnum: {GCS_BUCKET_NAME[0].isalnum()})"
+    error_msg += f"\n  - Must end with letter/number (ends with: '{GCS_BUCKET_NAME[-1]}' - isalnum: {GCS_BUCKET_NAME[-1].isalnum()})"
+    error_msg += f"\n  - Raw value from env: '{_raw_bucket_name}'"
+    logger.error(error_msg)
+    raise ValueError(error_msg)
 
 
 def check_for_new_data():
