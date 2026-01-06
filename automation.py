@@ -128,8 +128,11 @@ def check_for_new_data():
             else:
                 client = storage.Client()
             
-            logger.info(f"Checking GCS bucket: {GCS_BUCKET_NAME}")
-            bucket = client.bucket(GCS_BUCKET_NAME)
+            # Clean bucket name
+            bucket_name = GCS_BUCKET_NAME.strip('"').strip("'").strip()
+            logger.info(f"Checking GCS bucket: '{bucket_name}' (length: {len(bucket_name)})")
+            logger.info(f"Bucket name validation: starts='{bucket_name[0]}' ends='{bucket_name[-1]}'")
+            bucket = client.bucket(bucket_name)
             blob = bucket.blob(GCS_FILE_NAME)
             
             if blob.exists():
