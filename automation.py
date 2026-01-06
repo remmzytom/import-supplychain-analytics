@@ -327,7 +327,14 @@ def run_automation():
             raise Exception("Data analysis failed")
         
         # Step 6: Upload to GCS
-        upload_to_gcs(str(temp_cleaned_file))
+        try:
+            upload_to_gcs(str(temp_cleaned_file))
+            logger.info("GCS upload completed successfully")
+        except Exception as upload_error:
+            logger.error(f"GCS upload failed: {upload_error}")
+            logger.exception("GCS upload traceback:")
+            # Don't fail the entire pipeline if upload fails - we can retry
+            raise Exception(f"Failed to upload to GCS: {upload_error}")
         
         # Step 7: Cleanup temporary files
         if temp_raw_file.exists():
@@ -384,10 +391,18 @@ Please check logs for details.
     finally:
         # Send notification (don't let email failure stop the process)
         try:
-            send_email_notification(success=success, message=message)
+            if 'message' in locals():
+                send_email_notification(success=success, message=message)
+            else:
+                logger.warning("No message to send in notification")
         except Exception as email_error:
             logger.warning(f"Failed to send email notification: {email_error}")
+            # Don't fail the pipeline if email fails
+            pass
     
+    logger.info("=" * 60)
+    logger.info(f"Pipeline completed. Success: {success}")
+    logger.info("=" * 60)
     return success
 
 
