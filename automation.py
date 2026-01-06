@@ -230,7 +230,7 @@ def upload_to_gcs(file_path):
 
 def send_email_notification(success=True, message=""):
     """Send email notification about automation status"""
-    if not EMAIL_FROM or not EMAIL_TO:
+    if not EMAIL_FROM or not EMAIL_TO or not EMAIL_PASSWORD:
         logger.warning("Email not configured. Skipping notification.")
         return
     
@@ -347,22 +347,33 @@ Dashboard will auto-update on Streamlit Cloud.
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds() / 60
         
+        error_type = type(e).__name__
+        error_message = str(e)
+        
         message = f"""
 Pipeline FAILED!
 
-Error: {str(e)}
+Error Type: {error_type}
+Error: {error_message}
 Duration: {duration:.1f} minutes
 
 Please check logs for details.
         """
         
+        logger.error("=" * 60)
+        logger.error("PIPELINE FAILURE DETAILS")
+        logger.error("=" * 60)
         logger.error(message)
+        logger.error("=" * 60)
         logger.exception("Full error traceback:")
         success = False
     
     finally:
-        # Send notification
-        send_email_notification(success=success, message=message)
+        # Send notification (don't let email failure stop the process)
+        try:
+            send_email_notification(success=success, message=message)
+        except Exception as email_error:
+            logger.warning(f"Failed to send email notification: {email_error}")
     
     return success
 
