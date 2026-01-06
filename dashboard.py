@@ -120,19 +120,43 @@ def load_data_from_gcs():
         
         try:
             # Initialize GCS client with credentials
+            st.info(f"🔐 Authenticating with Google Cloud Storage...")
             client = storage.Client.from_service_account_json(creds_path)
+            
+            st.info(f"📦 Accessing bucket: `{bucket_name}`")
             bucket = client.bucket(bucket_name)
+            
+            st.info(f"📄 Looking for file: `{file_name}`")
             blob = bucket.blob(file_name)
             
+            # Check if file exists
+            if not blob.exists():
+                st.error(f"❌ File `{file_name}` not found in bucket `{bucket_name}`")
+                st.info("""
+                **Possible solutions:**
+                - Verify the file name in Streamlit secrets matches the file in GCS
+                - Check if the automation has uploaded the file successfully
+                - Verify the bucket name is correct
+                """)
+                return None
+            
             # Show loading progress
-            with st.spinner(f"Loading data from Google Cloud Storage ({file_name})..."):
+            file_size = blob.size
+            st.info(f"📊 File size: {file_size / (1024*1024):.2f} MB")
+            
+            with st.spinner(f"⬇️ Downloading `{file_name}` from Google Cloud Storage..."):
                 # Download to temporary file
                 with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
                     blob.download_to_filename(tmp_file.name)
                     tmp_path = tmp_file.name
                 
+                st.success("✅ File downloaded successfully!")
+                
                 # Load data from temporary file
-                return load_data_from_file(tmp_path)
+                with st.spinner("📖 Loading data into memory..."):
+                    df = load_data_from_file(tmp_path)
+                    st.success(f"✅ Data loaded successfully! ({len(df):,} rows)")
+                    return df
         finally:
             # Clean up credentials file
             if os.path.exists(creds_path):
@@ -142,9 +166,41 @@ def load_data_from_gcs():
                 os.unlink(tmp_path)
                 
     except Exception as e:
-        st.error(f"Error loading data from Google Cloud Storage: {str(e)}")
-        st.error("Please check your GCS configuration in Streamlit secrets.")
-        st.stop()
+        import traceback
+        error_details = traceback.format_exc()
+        st.error("❌ **Error loading data from Google Cloud Storage**")
+        st.error(f"**Error:** {str(e)}")
+        st.error("**Error Type:** " + type(e).__name__)
+        
+        # Show more details in expander
+        with st.expander("🔍 Click to see detailed error information"):
+            st.code(error_details)
+        
+        st.info("""
+        **Troubleshooting Steps:**
+        
+        1. **Check Streamlit Secrets:**
+           - Go to Streamlit Cloud → Settings → Secrets
+           - Verify `gcp.bucket_name` and `gcp.file_name` are set correctly
+           - Verify `gcp.credentials` contains valid service account JSON
+        
+        2. **Verify GCS Bucket:**
+           - Bucket name: `freight-import-data`
+           - File name: `imports_2024_2025_cleaned.csv` (or as configured)
+           - File should exist in the bucket
+        
+        3. **Check Service Account Permissions:**
+           - Service account needs `Storage Object Viewer` role to read files
+           - Go to GCS → Bucket → Permissions → Verify service account has access
+        
+        4. **Verify Credentials Format:**
+           - Credentials should be a JSON object (not a string)
+           - Should include: `type`, `project_id`, `private_key_id`, `private_key`, `client_email`, etc.
+        """)
+        
+        # Don't stop - allow fallback to file uploader
+        st.warning("⚠️ Falling back to file uploader option below...")
+        return None
 
 def load_data_from_file(file_path):
     """Load and process data from a CSV file"""
@@ -204,10 +260,12 @@ def load_data():
     # If local file not found, try Google Cloud Storage
     if GCS_AVAILABLE:
         try:
-            return load_data_from_gcs()
+            gcs_data = load_data_from_gcs()
+            if gcs_data is not None:
+                return gcs_data
         except Exception as e:
             st.warning(f"Could not load from GCS: {str(e)}")
-            st.info("Falling back to local file...")
+            st.info("Falling back to file uploader...")
     
     # If both fail, show error
     st.error(f"Data file not found: {data_path}")
