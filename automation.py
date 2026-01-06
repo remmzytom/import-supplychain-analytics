@@ -203,7 +203,10 @@ def download_and_merge_data():
             else:
                 client = storage.Client()
             
-            bucket = client.bucket(GCS_BUCKET_NAME)
+            # Clean bucket name
+            bucket_name = GCS_BUCKET_NAME.strip('"').strip("'").strip()
+            logger.info(f"Loading from GCS bucket: '{bucket_name}'")
+            bucket = client.bucket(bucket_name)
             blob = bucket.blob(GCS_FILE_NAME)
             
             if blob.exists():
