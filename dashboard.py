@@ -279,7 +279,7 @@ def load_data_with_fallback():
     This function handles widgets and should not be cached
     """
     # Try to load data (cached function)
-    df = load_data_with_fallback()
+    df = load_data()
     
     # If data loaded successfully, return it
     if df is not None:
