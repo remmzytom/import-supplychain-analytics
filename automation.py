@@ -245,6 +245,20 @@ def upload_to_gcs(file_path):
     try:
         logger.info(f"Uploading {file_path} to GCS...")
         
+        # Ensure bucket name is clean
+        bucket_name = GCS_BUCKET_NAME.strip('"').strip("'").strip()
+        file_name = GCS_FILE_NAME.strip('"').strip("'").strip()
+        
+        logger.info(f"Bucket name: '{bucket_name}' (repr: {repr(bucket_name)}, length: {len(bucket_name)})")
+        logger.info(f"File name: '{file_name}'")
+        logger.info(f"Bucket name bytes: {bucket_name.encode('utf-8')}")
+        
+        # Validate bucket name one more time
+        if not bucket_name:
+            raise ValueError("Bucket name is empty!")
+        if not (bucket_name[0].isalnum() and bucket_name[-1].isalnum()):
+            raise ValueError(f"Invalid bucket name format: '{bucket_name}' (starts: '{bucket_name[0]}', ends: '{bucket_name[-1]}')")
+        
         # Check if credentials file exists (from GitHub Actions)
         creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
         if creds_path and os.path.exists(creds_path):
@@ -255,18 +269,26 @@ def upload_to_gcs(file_path):
             logger.info("Using default credentials")
             client = storage.Client()
         
-        bucket = client.bucket(GCS_BUCKET_NAME)
-        blob = bucket.blob(GCS_FILE_NAME)
+        logger.info(f"Creating bucket reference for: '{bucket_name}'")
+        bucket = client.bucket(bucket_name)
+        logger.info(f"Creating blob reference for: '{file_name}'")
+        blob = bucket.blob(file_name)
         
-        logger.info(f"Uploading to bucket: {GCS_BUCKET_NAME}, file: {GCS_FILE_NAME}")
+        logger.info(f"Starting upload to gs://{bucket_name}/{file_name}")
         blob.upload_from_filename(file_path)
-        logger.info(f"Successfully uploaded to gs://{GCS_BUCKET_NAME}/{GCS_FILE_NAME}")
+        logger.info(f"Successfully uploaded to gs://{bucket_name}/{file_name}")
         
         return True
     except Exception as e:
-        logger.error(f"Error uploading to GCS: {e}")
-        logger.error(f"Bucket: {GCS_BUCKET_NAME}, File: {GCS_FILE_NAME}")
+        logger.error("=" * 60)
+        logger.error("GCS UPLOAD ERROR")
+        logger.error("=" * 60)
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error message: {str(e)}")
+        logger.error(f"Bucket name used: '{GCS_BUCKET_NAME}' (repr: {repr(GCS_BUCKET_NAME)})")
+        logger.error(f"File name used: '{GCS_FILE_NAME}'")
         logger.error(f"Credentials path: {os.getenv('GOOGLE_APPLICATION_CREDENTIALS', 'Not set')}")
+        logger.exception("Full traceback:")
         raise
 
 
