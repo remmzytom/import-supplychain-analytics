@@ -32,8 +32,11 @@ from run_pipeline import (
 
 # Configuration
 ABS_DATA_URL = "https://aueprod01ckanstg.blob.core.windows.net/public-catalogue/public/82d5fb9d-61ae-4ddd-873b-5c9501b6b743/imports.csv.zip"
-GCS_BUCKET_NAME = os.getenv('GCS_BUCKET_NAME', 'freight-import-data')
-GCS_FILE_NAME = os.getenv('GCS_FILE_NAME', 'imports_2024_2025_cleaned.csv')
+
+# Get and clean bucket name from environment
+_raw_bucket_name = os.getenv('GCS_BUCKET_NAME', 'freight-import-data')
+GCS_BUCKET_NAME = _raw_bucket_name.strip('"').strip("'").strip()  # Remove quotes and whitespace
+GCS_FILE_NAME = os.getenv('GCS_FILE_NAME', 'imports_2024_2025_cleaned.csv').strip('"').strip("'").strip()
 CHECK_INTERVAL_DAYS = 7  # Check weekly
 
 # Email configuration (from environment variables)
@@ -57,6 +60,27 @@ logger = logging.getLogger(__name__)
 
 # Ensure log file exists
 log_file.touch(exist_ok=True)
+
+# Log configuration (after logger is set up)
+logger.info("=" * 60)
+logger.info("CONFIGURATION")
+logger.info("=" * 60)
+logger.info(f"GCS_BUCKET_NAME: '{GCS_BUCKET_NAME}' (length: {len(GCS_BUCKET_NAME)}, raw: '{_raw_bucket_name}')")
+logger.info(f"GCS_FILE_NAME: '{GCS_FILE_NAME}'")
+logger.info(f"Bucket name starts with: '{GCS_BUCKET_NAME[0] if GCS_BUCKET_NAME else 'EMPTY'}'")
+logger.info(f"Bucket name ends with: '{GCS_BUCKET_NAME[-1] if GCS_BUCKET_NAME else 'EMPTY'}'")
+
+# Validate bucket name format
+if GCS_BUCKET_NAME:
+    if not (GCS_BUCKET_NAME[0].isalnum() and GCS_BUCKET_NAME[-1].isalnum()):
+        error_msg = f"INVALID BUCKET NAME: '{GCS_BUCKET_NAME}' does not meet GCS requirements!"
+        error_msg += f"\n  - Must start with letter/number (starts with: '{GCS_BUCKET_NAME[0]}')"
+        error_msg += f"\n  - Must end with letter/number (ends with: '{GCS_BUCKET_NAME[-1]}')"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+else:
+    logger.error("GCS_BUCKET_NAME is empty!")
+    raise ValueError("GCS_BUCKET_NAME environment variable is not set or is empty")
 
 
 def check_for_new_data():
