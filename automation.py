@@ -203,16 +203,28 @@ def upload_to_gcs(file_path):
     try:
         logger.info(f"Uploading {file_path} to GCS...")
         
-        client = storage.Client()
+        # Check if credentials file exists (from GitHub Actions)
+        creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+        if creds_path and os.path.exists(creds_path):
+            logger.info(f"Using credentials from: {creds_path}")
+            client = storage.Client.from_service_account_json(creds_path)
+        else:
+            # Try default credentials (for local or if env var not set)
+            logger.info("Using default credentials")
+            client = storage.Client()
+        
         bucket = client.bucket(GCS_BUCKET_NAME)
         blob = bucket.blob(GCS_FILE_NAME)
         
+        logger.info(f"Uploading to bucket: {GCS_BUCKET_NAME}, file: {GCS_FILE_NAME}")
         blob.upload_from_filename(file_path)
         logger.info(f"Successfully uploaded to gs://{GCS_BUCKET_NAME}/{GCS_FILE_NAME}")
         
         return True
     except Exception as e:
         logger.error(f"Error uploading to GCS: {e}")
+        logger.error(f"Bucket: {GCS_BUCKET_NAME}, File: {GCS_FILE_NAME}")
+        logger.error(f"Credentials path: {os.getenv('GOOGLE_APPLICATION_CREDENTIALS', 'Not set')}")
         raise
 
 
