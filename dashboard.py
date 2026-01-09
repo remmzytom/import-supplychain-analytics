@@ -505,19 +505,39 @@ def main():
     st.markdown('<h1 class="main-header">Freight Import Data Dashboard</h1>', unsafe_allow_html=True)
     st.markdown("---")
     
-    # Load data
-    df = load_data_with_fallback()
-    
-    # Check if data was loaded successfully
-    if df is None or len(df) == 0:
-        st.warning("⚠️ No data available. Please configure data source or upload a file.")
+    # Load data with error handling
+    try:
+        df = load_data_with_fallback()
+        
+        # Check if data was loaded successfully
+        if df is None or len(df) == 0:
+            st.warning("⚠️ No data available. Please configure data source or upload a file.")
+            return
+        
+        # Validate required columns exist
+        required_columns = ['year', 'month', 'country_description', 'valuecif', 'valuefob', 'weight']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            st.error(f"⚠️ Missing required columns: {', '.join(missing_columns)}")
+            st.info("Please ensure your data file contains all required columns.")
+            return
+            
+    except Exception as e:
+        st.error(f"⚠️ Error loading or processing data: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
         return
     
     # Sidebar filters
     st.sidebar.header("Filters")
     
     # Year filter
-    available_years = sorted(df['year'].unique())
+    try:
+        available_years = sorted(df['year'].unique())
+    except Exception as e:
+        st.error(f"Error accessing year column: {str(e)}")
+        return
     selected_years = st.sidebar.multiselect(
         "Select Years",
         options=available_years,
