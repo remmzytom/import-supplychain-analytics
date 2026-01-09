@@ -442,16 +442,27 @@ def load_data():
     # Try local file first (for local development)
     data_path = 'data/imports_2024_2025_cleaned.csv'
     
-    if os.path.exists(data_path):
-        return load_data_from_file(data_path)
+    try:
+        if os.path.exists(data_path):
+            return load_data_from_file(data_path)
+    except Exception as e:
+        # Silently fail and try GCS
+        pass
     
     # If local file not found, try Google Cloud Storage
     if GCS_AVAILABLE:
         try:
+            # Check if secrets are available before trying to load
+            if 'gcp' not in st.secrets:
+                return None
+            
             # Use internal function without widgets for cached context
             gcs_data = _load_data_from_gcs_internal(show_progress=False)
-            if gcs_data is not None:
+            if gcs_data is not None and len(gcs_data) > 0:
                 return gcs_data
+        except KeyError:
+            # Secrets not configured - return None gracefully
+            return None
         except Exception as e:
             # Don't show widgets here - return None and let main() handle it
             return None
@@ -1669,5 +1680,30 @@ def show_key_insights(df):
         st.metric("Top 10 Commodities Share", f"{top_10_commodities_pct:.2f}%")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        st.error("⚠️ **Critical Error: Dashboard failed to load**")
+        st.error(f"**Error:** {str(e)}")
+        st.error(f"**Error Type:** {type(e).__name__}")
+        
+        with st.expander("🔍 Show detailed error information"):
+            st.code(traceback.format_exc())
+        
+        st.info("""
+        **Common causes:**
+        1. Missing or incorrect Streamlit secrets configuration
+        2. Data file not available in Google Cloud Storage
+        3. Missing required Python packages
+        4. Data file format issues
+        
+        **To fix:**
+        1. Check Streamlit Cloud logs: Settings → Logs
+        2. Verify GCS secrets are configured correctly
+        3. Ensure data file exists in GCS bucket
+        4. Check that all dependencies are in requirements.txt
+        """)
+        
+        st.stop()
 
