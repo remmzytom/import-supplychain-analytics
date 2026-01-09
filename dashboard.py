@@ -35,39 +35,141 @@ except ImportError:
 
 warnings.filterwarnings('ignore')
 
+# Dark Theme Function for Plotly Charts
+def apply_dark_theme(fig):
+    """Apply dark theme to Plotly charts"""
+    fig.update_layout(
+        template='plotly_dark',
+        plot_bgcolor='#1e2130',
+        paper_bgcolor='#0e1117',
+        font=dict(color='#ffffff'),
+        title=dict(font=dict(color='#ffffff')),
+        xaxis=dict(gridcolor='#2d3748', linecolor='#4a5568'),
+        yaxis=dict(gridcolor='#2d3748', linecolor='#4a5568'),
+    )
+    return fig
+
 # Page configuration
 st.set_page_config(
     page_title="Freight Import Data Dashboard",
-    page_icon="📊",
+    page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Custom CSS - Dark Theme
 st.markdown("""
     <style>
+    /* Dark Background */
+    .main {
+        background-color: #0e1117;
+    }
+    .stApp {
+        background-color: #0e1117;
+    }
+    .block-container {
+        background-color: #0e1117;
+    }
+    body {
+        background-color: #0e1117 !important;
+    }
+    html {
+        background-color: #0e1117 !important;
+    }
+    
+    /* Main Header */
     .main-header {
         font-size: 2.5rem;
         font-weight: bold;
-        color: #1f77b4;
+        color: #ffffff;
         text-align: center;
         padding: 1rem 0;
     }
+    
+    /* Section Headers */
     .section-header {
         font-size: 1.8rem;
         font-weight: bold;
-        color: #2c3e50;
+        color: #ffffff;
         margin-top: 2rem;
         margin-bottom: 1rem;
         border-bottom: 3px solid #1f77b4;
         padding-bottom: 0.5rem;
     }
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #1f77b4;
+    
+    /* Text Colors */
+    p, span, div, label, h1, h2, h3, h4, h5, h6 {
+        color: #ffffff !important;
     }
+    .stMarkdown {
+        color: #ffffff;
+    }
+    
+    /* Metric Cards */
+    .metric-card {
+        background: linear-gradient(135deg, #1e2130 0%, #2d3748 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        border: 1px solid rgba(31, 119, 180, 0.3);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        transition: all 0.3s ease;
+        margin-bottom: 1rem;
+        width: 100%;
+        height: 140px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-sizing: border-box;
+    }
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+        border-color: rgba(31, 119, 180, 0.5);
+    }
+    .metric-card-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #a0aec0;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.5rem;
+        line-height: 1.2;
+    }
+    .metric-card-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #ffffff;
+        margin: 0;
+        line-height: 1.2;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    div[data-testid="stMetricContainer"] {
+        background: linear-gradient(135deg, #1e2130 0%, #2d3748 100%) !important;
+        padding: 1.5rem !important;
+        border-radius: 12px !important;
+        border: 1px solid rgba(31, 119, 180, 0.3) !important;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3) !important;
+    }
+    div[data-testid="stMetricContainer"]:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4) !important;
+        border-color: rgba(31, 119, 180, 0.5) !important;
+    }
+    [data-testid="stMetricValue"] {
+        font-size: 2rem !important;
+        font-weight: 700 !important;
+        color: #ffffff !important;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 0.9rem !important;
+        font-weight: 600 !important;
+        color: #a0aec0 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    /* Navigation Button */
     .nav-button {
         background-color: #1f77b4;
         color: white;
@@ -81,14 +183,70 @@ st.markdown("""
     .nav-button:hover {
         background-color: #155a8a;
     }
+    
+    /* Navigation Container */
     .nav-container {
         display: flex;
         justify-content: space-between;
         align-items: center;
         padding: 1rem;
-        background-color: #f8f9fa;
+        background-color: #1e2130;
         border-radius: 10px;
         margin: 1rem 0;
+    }
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #1e2130;
+    }
+    [data-testid="stSidebar"] .stMarkdown {
+        color: #ffffff;
+    }
+    [data-testid="stSidebar"] label {
+        color: #ffffff !important;
+    }
+    
+    /* Info/Error/Success/Warning Boxes */
+    .stInfo {
+        background-color: #1e2130;
+        border-left: 4px solid #1f77b4;
+        color: #ffffff;
+    }
+    .stError {
+        background-color: #2d1a1a;
+        border-left: 4px solid #e53e3e;
+        color: #ffffff;
+    }
+    .stSuccess {
+        background-color: #1a2d1a;
+        border-left: 4px solid #38a169;
+        color: #ffffff;
+    }
+    .stWarning {
+        background-color: #2d2a1a;
+        border-left: 4px solid #d69e2e;
+        color: #ffffff;
+    }
+    
+    /* Selectbox and Input Fields */
+    [data-baseweb="select"] {
+        background-color: #1e2130;
+        color: #ffffff;
+    }
+    input, textarea, select {
+        background-color: #1e2130 !important;
+        color: #ffffff !important;
+    }
+    
+    /* Dataframe */
+    .dataframe {
+        background-color: #1e2130;
+        color: #ffffff;
+    }
+    
+    /* Horizontal Rule */
+    hr {
+        border-color: #2d3748;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -308,7 +466,7 @@ def load_data_with_fallback():
         return df
     
     # If data not found, show error and offer file uploader
-    st.error("❌ **Data file not found**")
+    st.error("**Data file not found**")
     st.info("""
     **For local development:**
     - Ensure `data/imports_2024_2025_cleaned.csv` exists in your project directory
@@ -332,14 +490,14 @@ def main():
     """Main dashboard application"""
     
     # Header
-    st.markdown('<h1 class="main-header">📊 Freight Import Data Dashboard</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">Freight Import Data Dashboard</h1>', unsafe_allow_html=True)
     st.markdown("---")
     
     # Load data
     df = load_data_with_fallback()
     
     # Sidebar filters
-    st.sidebar.header("🔍 Filters")
+    st.sidebar.header("Filters")
     
     # Year filter
     available_years = sorted(df['year'].unique())
@@ -376,18 +534,18 @@ def main():
     
     # Table of Contents for quick navigation
     st.markdown("---")
-    st.markdown("### 📑 Table of Contents")
+    st.markdown("### Table of Contents")
     toc_cols = st.columns(4)
     
     sections_list = [
-        ("📈 Overview", "overview"),
-        ("📅 Time Series", "time-series"),
-        ("🌍 Geographic", "geographic"),
-        ("📦 Commodity", "commodity"),
-        ("💎 Value vs Volume", "value-volume"),
-        ("⚠️ Risk Analysis", "risk"),
-        ("🚢 Transport Mode", "transport"),
-        ("💡 Key Insights", "insights")
+        ("Overview", "overview"),
+        ("Time Series", "time-series"),
+        ("Geographic", "geographic"),
+        ("Commodity", "commodity"),
+        ("Value vs Volume", "value-volume"),
+        ("Risk Analysis", "risk"),
+        ("Transport Mode", "transport"),
+        ("Key Insights", "insights")
     ]
     
     for idx, (name, anchor) in enumerate(sections_list):
@@ -446,9 +604,9 @@ def main():
 
 def show_overview(df):
     """Display overview metrics"""
-    st.markdown('<h2 class="section-header">📈 Overview</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="section-header">Overview</h2>', unsafe_allow_html=True)
     
-    # Key metrics
+    # Key metrics in cards
     col1, col2, col3, col4 = st.columns(4)
     
     total_fob = df['valuefob'].sum()
@@ -457,22 +615,42 @@ def show_overview(df):
     total_records = len(df)
     
     with col1:
-        st.metric("Total Records", f"{total_records:,}")
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-card-title">Total Records</div>
+            <div class="metric-card-value">{total_records:,}</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col2:
-        st.metric("Total FOB Value", f"${total_fob/1e9:.2f}B")
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-card-title">Total FOB Value</div>
+            <div class="metric-card-value">${total_fob/1e9:.2f}B</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col3:
-        st.metric("Total CIF Value", f"${total_cif/1e9:.2f}B")
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-card-title">Total CIF Value</div>
+            <div class="metric-card-value">${total_cif/1e9:.2f}B</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col4:
-        st.metric("Total Weight", f"{total_weight/1e6:.2f}M tonnes")
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-card-title">Total Weight</div>
+            <div class="metric-card-value">{total_weight/1e6:.2f}M tonnes</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     st.markdown("---")
     
     # Year range
     year_range = f"{df['year'].min():.0f} - {df['year'].max():.0f}"
-    st.info(f"📅 Date Range: {year_range}")
+    st.info(f"Date Range: {year_range}")
     
     # Quick summary charts
     col1, col2 = st.columns(2)
@@ -487,6 +665,7 @@ def show_overview(df):
             title="Top 5 Countries by Import Value (CIF)",
             labels={'x': 'Value (Billions AUD)', 'y': 'Country'}
         )
+        fig = apply_dark_theme(fig)
         fig.update_layout(height=400)
         st.plotly_chart(fig, use_container_width=True)
     
@@ -510,12 +689,13 @@ def show_overview(df):
         )
         fig.update_traces(hovertemplate='<b>%{customdata[0]}</b><br>Value: %{x:.2f} Billion AUD<extra></extra>',
                           customdata=top_commodities_df[['commodity_description']].values)
+        fig = apply_dark_theme(fig)
         fig.update_layout(height=400)
         st.plotly_chart(fig, use_container_width=True)
 
 def show_time_series(df):
     """Display time series analysis"""
-    st.markdown('<h2 class="section-header">📅 Time Series Analysis</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="section-header">Time Series Analysis</h2>', unsafe_allow_html=True)
     
     # Monthly trends
     monthly_stats = df.groupby(['year', 'month_number', 'month']).agg({
@@ -972,7 +1152,7 @@ def show_commodity_analysis(df):
 
 def show_value_volume_analysis(df):
     """Display value vs volume analysis"""
-    st.markdown('<h2 class="section-header">💎 Value vs Volume Analysis</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="section-header">Value vs Volume Analysis</h2>', unsafe_allow_html=True)
     
     if 'industry_sector' not in df.columns:
         df['industry_sector'] = df['commodity_code'].apply(map_commodity_code_to_sitc_industry)
@@ -1089,7 +1269,7 @@ def show_value_volume_analysis(df):
 
 def show_risk_analysis(df):
     """Display risk analysis"""
-    st.markdown('<h2 class="section-header">⚠️ Risk Analysis</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="section-header">Risk Analysis</h2>', unsafe_allow_html=True)
     
     # Country Concentration Analysis
     st.subheader("Country Concentration Risk")
@@ -1323,7 +1503,7 @@ def show_risk_analysis(df):
 
 def show_transport_mode_analysis(df):
     """Display transport mode analysis"""
-    st.markdown('<h2 class="section-header">🚢 Transport Mode Analysis</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="section-header">Transport Mode Analysis</h2>', unsafe_allow_html=True)
     
     mode_stats = df.groupby('mode_description').agg({
         'valuefob': 'sum',
@@ -1376,7 +1556,7 @@ def show_transport_mode_analysis(df):
 
 def show_key_insights(df):
     """Display key insights and summary"""
-    st.markdown('<h2 class="section-header">💡 Key Insights</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="section-header">Key Insights</h2>', unsafe_allow_html=True)
     
     # Calculate key metrics
     country_stats = df.groupby('country_description').agg({
@@ -1407,7 +1587,7 @@ def show_key_insights(df):
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("### 📊 Top Statistics")
+        st.markdown("### Top Statistics")
         
         top_country = country_stats.iloc[0]
         st.info(f"**Top Import Source:** {top_country['country_description']}\n\n"
@@ -1419,7 +1599,7 @@ def show_key_insights(df):
                 f"Value: ${top_commodity['valuecif']/1e9:.2f}B ({top_commodity['valuecif_pct']:.2f}% of total)")
     
     with col2:
-        st.markdown("### 📈 Additional Insights")
+        st.markdown("### Additional Insights")
         
         top_mode = mode_stats.iloc[0]
         st.info(f"**Dominant Transport Mode:** {top_mode['mode_description']}\n\n"
@@ -1433,7 +1613,7 @@ def show_key_insights(df):
     if len(yearly_stats) > 1:
         yoy_growth = ((yearly_stats.iloc[1]['valuefob'] - yearly_stats.iloc[0]['valuefob']) / 
                      yearly_stats.iloc[0]['valuefob']) * 100
-        st.markdown("### 📅 Year-over-Year Growth")
+        st.markdown("### Year-over-Year Growth")
         st.metric(
             "Growth Rate",
             f"{yoy_growth:+.2f}%",
@@ -1441,7 +1621,7 @@ def show_key_insights(df):
         )
     
     # Market concentration
-    st.markdown("### 🎯 Market Concentration")
+    st.markdown("### Market Concentration")
     top_5_countries_pct = country_stats.head(5)['valuecif_pct'].sum()
     top_10_commodities_pct = commodity_stats.head(10)['valuecif_pct'].sum()
     
