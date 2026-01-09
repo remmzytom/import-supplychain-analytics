@@ -26,12 +26,15 @@ except ImportError:
 # Add current directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Import commodity mapping
+# Import commodity mapping (optional - provide fallback)
 try:
     from commodity_code_mapping import map_commodity_code_to_sitc_industry
+    COMMODITY_MAPPING_AVAILABLE = True
 except ImportError:
-    st.error("Could not import commodity_code_mapping. Please ensure commodity_code_mapping.py is in the same directory.")
-    st.stop()
+    COMMODITY_MAPPING_AVAILABLE = False
+    # Fallback function if mapping is not available
+    def map_commodity_code_to_sitc_industry(code):
+        return "Unknown"
 
 warnings.filterwarnings('ignore')
 
@@ -459,11 +462,14 @@ def load_data_with_fallback():
     This function handles widgets and should not be cached
     """
     # Try to load data (cached function)
-    df = load_data()
-    
-    # If data loaded successfully, return it
-    if df is not None:
-        return df
+    try:
+        df = load_data()
+        
+        # If data loaded successfully, return it
+        if df is not None and len(df) > 0:
+            return df
+    except Exception as e:
+        st.warning(f"Error loading data: {str(e)}")
     
     # If data not found, show error and offer file uploader
     st.error("**Data file not found**")
@@ -479,12 +485,16 @@ def load_data_with_fallback():
     # Offer file uploader as fallback (this is outside cached function)
     uploaded_file = st.file_uploader("Upload cleaned data file (CSV)", type=['csv'])
     if uploaded_file is not None:
-        with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            tmp_path = tmp_file.name
-        return load_data_from_file(tmp_path)
+        try:
+            with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
+                tmp_file.write(uploaded_file.getvalue())
+                tmp_path = tmp_file.name
+            return load_data_from_file(tmp_path)
+        except Exception as e:
+            st.error(f"Error loading uploaded file: {str(e)}")
+            return None
     
-    st.stop()
+    return None
 
 def main():
     """Main dashboard application"""
@@ -495,6 +505,11 @@ def main():
     
     # Load data
     df = load_data_with_fallback()
+    
+    # Check if data was loaded successfully
+    if df is None or len(df) == 0:
+        st.warning("⚠️ No data available. Please configure data source or upload a file.")
+        return
     
     # Sidebar filters
     st.sidebar.header("Filters")
