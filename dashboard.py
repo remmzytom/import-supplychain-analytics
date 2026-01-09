@@ -35,17 +35,17 @@ except ImportError:
 
 warnings.filterwarnings('ignore')
 
-# Dark Theme Function for Plotly Charts
-def apply_dark_theme(fig):
-    """Apply dark theme to Plotly charts"""
+# Light Theme Function for Plotly Charts
+def apply_light_theme(fig):
+    """Apply light theme to Plotly charts"""
     fig.update_layout(
-        template='plotly_dark',
-        plot_bgcolor='#1e2130',
-        paper_bgcolor='#0e1117',
-        font=dict(color='#ffffff'),
-        title=dict(font=dict(color='#ffffff')),
-        xaxis=dict(gridcolor='#2d3748', linecolor='#4a5568'),
-        yaxis=dict(gridcolor='#2d3748', linecolor='#4a5568'),
+        template='plotly_white',
+        plot_bgcolor='#ffffff',
+        paper_bgcolor='#ffffff',
+        font=dict(color='#262730'),
+        title=dict(font=dict(color='#262730')),
+        xaxis=dict(gridcolor='#e0e0e0', linecolor='#b0b0b0'),
+        yaxis=dict(gridcolor='#e0e0e0', linecolor='#b0b0b0'),
     )
     return fig
 
@@ -57,31 +57,31 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS - Dark Theme
+# Custom CSS
 st.markdown("""
     <style>
-    /* Dark Background */
+    /* Light Background */
     .main {
-        background-color: #0e1117;
+        background-color: #ffffff;
     }
     .stApp {
-        background-color: #0e1117;
+        background-color: #ffffff;
     }
     .block-container {
-        background-color: #0e1117;
+        background-color: #ffffff;
     }
     body {
-        background-color: #0e1117 !important;
+        background-color: #ffffff !important;
     }
     html {
-        background-color: #0e1117 !important;
+        background-color: #ffffff !important;
     }
     
     /* Main Header */
     .main-header {
         font-size: 2.5rem;
         font-weight: bold;
-        color: #ffffff;
+        color: #1f77b4;
         text-align: center;
         padding: 1rem 0;
     }
@@ -90,7 +90,7 @@ st.markdown("""
     .section-header {
         font-size: 1.8rem;
         font-weight: bold;
-        color: #ffffff;
+        color: #2c3e50;
         margin-top: 2rem;
         margin-bottom: 1rem;
         border-bottom: 3px solid #1f77b4;
@@ -99,19 +99,19 @@ st.markdown("""
     
     /* Text Colors */
     p, span, div, label, h1, h2, h3, h4, h5, h6 {
-        color: #ffffff !important;
+        color: #262730 !important;
     }
     .stMarkdown {
-        color: #ffffff;
+        color: #262730;
     }
     
     /* Metric Cards */
     .metric-card {
-        background: linear-gradient(135deg, #1e2130 0%, #2d3748 100%);
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
         padding: 1.5rem;
         border-radius: 12px;
         border: 1px solid rgba(31, 119, 180, 0.3);
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         transition: all 0.3s ease;
         margin-bottom: 1rem;
         width: 100%;
@@ -123,13 +123,13 @@ st.markdown("""
     }
     .metric-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
         border-color: rgba(31, 119, 180, 0.5);
     }
     .metric-card-title {
         font-size: 0.9rem;
         font-weight: 600;
-        color: #a0aec0;
+        color: #6c757d;
         text-transform: uppercase;
         letter-spacing: 0.05em;
         margin-bottom: 0.5rem;
@@ -138,7 +138,7 @@ st.markdown("""
     .metric-card-value {
         font-size: 2rem;
         font-weight: 700;
-        color: #ffffff;
+        color: #1f77b4;
         margin: 0;
         line-height: 1.2;
         word-wrap: break-word;
@@ -190,63 +190,63 @@ st.markdown("""
         justify-content: space-between;
         align-items: center;
         padding: 1rem;
-        background-color: #1e2130;
+        background-color: #f8f9fa;
         border-radius: 10px;
         margin: 1rem 0;
     }
     
     /* Sidebar */
     [data-testid="stSidebar"] {
-        background-color: #1e2130;
+        background-color: #ffffff;
     }
     [data-testid="stSidebar"] .stMarkdown {
-        color: #ffffff;
+        color: #262730;
     }
     [data-testid="stSidebar"] label {
-        color: #ffffff !important;
+        color: #262730 !important;
     }
     
     /* Info/Error/Success/Warning Boxes */
     .stInfo {
-        background-color: #1e2130;
+        background-color: #e7f3ff;
         border-left: 4px solid #1f77b4;
-        color: #ffffff;
+        color: #262730;
     }
     .stError {
-        background-color: #2d1a1a;
+        background-color: #ffe7e7;
         border-left: 4px solid #e53e3e;
-        color: #ffffff;
+        color: #262730;
     }
     .stSuccess {
-        background-color: #1a2d1a;
+        background-color: #e7f5e7;
         border-left: 4px solid #38a169;
-        color: #ffffff;
+        color: #262730;
     }
     .stWarning {
-        background-color: #2d2a1a;
+        background-color: #fff4e7;
         border-left: 4px solid #d69e2e;
-        color: #ffffff;
+        color: #262730;
     }
     
     /* Selectbox and Input Fields */
     [data-baseweb="select"] {
-        background-color: #1e2130;
-        color: #ffffff;
+        background-color: #ffffff;
+        color: #262730;
     }
     input, textarea, select {
-        background-color: #1e2130 !important;
-        color: #ffffff !important;
+        background-color: #ffffff !important;
+        color: #262730 !important;
     }
     
     /* Dataframe */
     .dataframe {
-        background-color: #1e2130;
-        color: #ffffff;
+        background-color: #ffffff;
+        color: #262730;
     }
     
     /* Horizontal Rule */
     hr {
-        border-color: #2d3748;
+        border-color: #e0e0e0;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -665,7 +665,7 @@ def show_overview(df):
             title="Top 5 Countries by Import Value (CIF)",
             labels={'x': 'Value (Billions AUD)', 'y': 'Country'}
         )
-        fig = apply_dark_theme(fig)
+        fig = apply_light_theme(fig)
         fig.update_layout(height=400)
         st.plotly_chart(fig, use_container_width=True)
     
@@ -689,7 +689,7 @@ def show_overview(df):
         )
         fig.update_traces(hovertemplate='<b>%{customdata[0]}</b><br>Value: %{x:.2f} Billion AUD<extra></extra>',
                           customdata=top_commodities_df[['commodity_description']].values)
-        fig = apply_dark_theme(fig)
+        fig = apply_light_theme(fig)
         fig.update_layout(height=400)
         st.plotly_chart(fig, use_container_width=True)
 
