@@ -429,7 +429,9 @@ def load_data_from_file(file_path):
     
     except Exception as e:
         st.error(f"Error loading data from file: {str(e)}")
-        st.stop()
+        import traceback
+        st.code(traceback.format_exc())
+        return None
 
 @st.cache_data
 def load_data():
