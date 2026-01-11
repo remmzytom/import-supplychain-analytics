@@ -462,34 +462,32 @@ def load_data():
     """Load and cache the cleaned import data
     Tries local file first, then Google Cloud Storage if available
     NOTE: This function cannot contain widget commands (like st.file_uploader)
+    NOTE: Cannot access st.secrets directly in cached functions - must pass as parameter
     """
+    import sys
+    print("load_data() called", file=sys.stderr)
+    
     # Try local file first (for local development)
     data_path = 'data/imports_2024_2025_cleaned.csv'
+    print(f"Checking for local file: {data_path}", file=sys.stderr)
     
     try:
         if os.path.exists(data_path):
+            print(f"Local file found, loading...", file=sys.stderr)
             return load_data_from_file(data_path)
+        else:
+            print(f"Local file not found", file=sys.stderr)
     except Exception as e:
+        print(f"ERROR loading local file: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         # Silently fail and try GCS
         pass
     
     # If local file not found, try Google Cloud Storage
-    if GCS_AVAILABLE:
-        try:
-            # Check if secrets are available before trying to load
-            if 'gcp' not in st.secrets:
-                return None
-            
-            # Use internal function without widgets for cached context
-            gcs_data = _load_data_from_gcs_internal(show_progress=False)
-            if gcs_data is not None and len(gcs_data) > 0:
-                return gcs_data
-        except KeyError:
-            # Secrets not configured - return None gracefully
-            return None
-        except Exception as e:
-            # Don't show widgets here - return None and let main() handle it
-            return None
+    # NOTE: Cannot access st.secrets in cached function - return None and let non-cached function handle it
+    print(f"GCS_AVAILABLE: {GCS_AVAILABLE}", file=sys.stderr)
+    print("Cannot access st.secrets in cached function - returning None", file=sys.stderr)
     
     # If both fail, return None (main() will handle the error and file uploader)
     return None
