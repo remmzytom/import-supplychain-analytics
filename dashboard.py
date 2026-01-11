@@ -418,6 +418,133 @@ def load_data_from_gcs():
     """Load data from Google Cloud Storage (with progress indicators)"""
     return _load_data_from_gcs_internal(show_progress=True)
 
+def query_bigquery(limit_rows=None, filters=None):
+    """Query data from BigQuery instead of downloading entire CSV
+    This is much more memory-efficient for large datasets
+    
+    Args:
+        limit_rows: Maximum number of rows to return (None = no limit, but use wisely!)
+        filters: Dict of filters like {'year': [2024, 2025], 'month': ['January', 'February']}
+    
+    Returns:
+        pandas.DataFrame or None
+    """
+    import sys
+    
+    if not BIGQUERY_AVAILABLE:
+        print("BigQuery not available", file=sys.stderr)
+        return None
+    
+    try:
+        print("Querying BigQuery...", file=sys.stderr)
+        
+        # Get BigQuery configuration from Streamlit secrets
+        if 'gcp' not in st.secrets:
+            print("GCP configuration not found in Streamlit secrets", file=sys.stderr)
+            return None
+        
+        gcp_config = st.secrets['gcp']
+        dataset_id = gcp_config.get('bigquery_dataset', 'freight_import_data')
+        table_id = gcp_config.get('bigquery_table', 'imports_cleaned')
+        project_id = gcp_config.get('bigquery_project', '')
+        
+        print(f"BigQuery config - Dataset: {dataset_id}, Table: {table_id}, Project: {project_id}", file=sys.stderr)
+        
+        # Get credentials from secrets
+        if 'credentials' not in gcp_config:
+            print("GCP credentials not found in Streamlit secrets", file=sys.stderr)
+            return None
+        
+        # Create credentials dict from secrets
+        credentials_dict = dict(gcp_config['credentials'])
+        
+        # Create temporary file for credentials
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as creds_file:
+            json.dump(credentials_dict, creds_file)
+            creds_path = creds_file.name
+        
+        try:
+            # Initialize BigQuery client
+            client = bigquery.Client.from_service_account_json(creds_path)
+            
+            # Get project ID from credentials if not set
+            if not project_id:
+                import json
+                with open(creds_path, 'r') as f:
+                    creds_data = json.load(f)
+                    project_id = creds_data.get('project_id')
+                    if project_id:
+                        client.project = project_id
+                        print(f"Using project ID from credentials: {project_id}", file=sys.stderr)
+            
+            if not project_id:
+                print("ERROR: BigQuery project ID not found", file=sys.stderr)
+                return None
+            
+            # Build query
+            table_ref = f"{project_id}.{dataset_id}.{table_id}"
+            
+            # Start with base query
+            query = f"SELECT * FROM `{table_ref}`"
+            
+            # Add filters if provided
+            where_conditions = []
+            if filters:
+                if 'year' in filters and filters['year']:
+                    years = ', '.join(map(str, filters['year']))
+                    where_conditions.append(f"year IN ({years})")
+                if 'month' in filters and filters['month']:
+                    months = ', '.join([f"'{m}'" for m in filters['month']])
+                    where_conditions.append(f"month IN ({months})")
+                if 'country' in filters and filters['country']:
+                    countries = ', '.join([f"'{c.replace(\"'\", \"''\")}'" for c in filters['country']])
+                    where_conditions.append(f"country_description IN ({countries})")
+            
+            if where_conditions:
+                query += " WHERE " + " AND ".join(where_conditions)
+            
+            # Add limit if specified (recommended for large datasets)
+            if limit_rows:
+                query += f" LIMIT {limit_rows}"
+            else:
+                # Default limit to prevent memory issues
+                query += " LIMIT 2000000"  # 2M rows max by default
+                print("Using default limit of 2M rows to prevent memory issues", file=sys.stderr)
+            
+            print(f"Executing query: {query[:200]}...", file=sys.stderr)
+            
+            # Execute query
+            query_job = client.query(query)
+            df = query_job.to_dataframe()
+            
+            print(f"Query returned {len(df):,} rows", file=sys.stderr)
+            
+            # Optimize data types
+            if 'year' in df.columns:
+                df['year'] = df['year'].astype('int16')
+            if 'month_number' in df.columns:
+                df['month_number'] = df['month_number'].astype('int8')
+            
+            # Create date column if needed
+            if 'date' not in df.columns and 'year' in df.columns and 'month_number' in df.columns:
+                df['date'] = pd.to_datetime(
+                    df['year'].astype(str) + '-' + 
+                    df['month_number'].astype(str).str.zfill(2) + '-01'
+                )
+            
+            return df
+            
+        finally:
+            # Clean up credentials file
+            if os.path.exists(creds_path):
+                os.unlink(creds_path)
+                
+    except Exception as e:
+        print(f"ERROR querying BigQuery: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return None
+
 def load_data_from_file(file_path):
     """Load and process data from a CSV file"""
     import sys
