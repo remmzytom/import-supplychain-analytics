@@ -1705,35 +1705,60 @@ def show_key_insights(df):
 
 # Main execution - wrap everything to catch any errors
 if __name__ == "__main__":
+    import sys
+    import traceback
+    
+    # Always log to stderr first so errors appear in logs
+    print("=" * 80, file=sys.stderr)
+    print("DASHBOARD STARTING", file=sys.stderr)
+    print("=" * 80, file=sys.stderr)
+    
     try:
+        print("Calling main()...", file=sys.stderr)
         main()
+        print("main() completed successfully", file=sys.stderr)
     except Exception as e:
-        import traceback
-    try:
-        st.error("⚠️ **Critical Error: Dashboard failed to load**")
-        st.error(f"**Error:** {str(e)}")
-        st.error(f"**Error Type:** {type(e).__name__}")
+        error_msg = f"CRITICAL ERROR: {str(e)}"
+        error_type = type(e).__name__
+        error_trace = traceback.format_exc()
         
-        with st.expander("🔍 Show detailed error information"):
-            st.code(traceback.format_exc())
+        # Always print to stderr first (appears in logs)
+        print("=" * 80, file=sys.stderr)
+        print("ERROR CAUGHT:", file=sys.stderr)
+        print(error_msg, file=sys.stderr)
+        print(f"Error Type: {error_type}", file=sys.stderr)
+        print("-" * 80, file=sys.stderr)
+        print(error_trace, file=sys.stderr)
+        print("=" * 80, file=sys.stderr)
         
-        st.info("""
-        **Common causes:**
-        1. Missing or incorrect Streamlit secrets configuration
-        2. Data file not available in Google Cloud Storage
-        3. Missing required Python packages
-        4. Data file format issues
-        
-        **To fix:**
-        1. Check Streamlit Cloud logs: Settings → Logs
-        2. Verify GCS secrets are configured correctly
-        3. Ensure data file exists in GCS bucket
-        4. Check that all dependencies are in requirements.txt
-        """)
-    except:
-        # Even error display failed - this shouldn't happen but handle it
-        st.write("Critical error occurred. Check logs for details.")
-        import sys
-        print(f"CRITICAL ERROR: {str(e)}", file=sys.stderr)
-        print(traceback.format_exc(), file=sys.stderr)
+        # Then try to display in Streamlit
+        try:
+            st.error("⚠️ **Critical Error: Dashboard failed to load**")
+            st.error(f"**Error:** {str(e)}")
+            st.error(f"**Error Type:** {error_type}")
+            
+            with st.expander("🔍 Show detailed error information"):
+                st.code(error_trace)
+            
+            st.info("""
+            **Common causes:**
+            1. Missing or incorrect Streamlit secrets configuration
+            2. Data file not available in Google Cloud Storage
+            3. Missing required Python packages
+            4. Data file format issues
+            
+            **To fix:**
+            1. Check Streamlit Cloud logs: Settings → Logs
+            2. Verify GCS secrets are configured correctly
+            3. Ensure data file exists in GCS bucket
+            4. Check that all dependencies are in requirements.txt
+            """)
+        except Exception as display_error:
+            # Even error display failed - log it
+            print(f"ERROR DISPLAY ALSO FAILED: {display_error}", file=sys.stderr)
+            print(traceback.format_exc(), file=sys.stderr)
+            try:
+                st.write("Critical error occurred. Check logs for details.")
+            except:
+                pass
 
