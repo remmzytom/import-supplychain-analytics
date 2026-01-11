@@ -535,14 +535,27 @@ def load_data_with_fallback():
 
 def main():
     """Main dashboard application"""
+    import sys
+    
+    print("main() function called", file=sys.stderr)
     
     # Header
-    st.markdown('<h1 class="main-header">Freight Import Data Dashboard</h1>', unsafe_allow_html=True)
-    st.markdown("---")
+    try:
+        print("Displaying header...", file=sys.stderr)
+        st.markdown('<h1 class="main-header">Freight Import Data Dashboard</h1>', unsafe_allow_html=True)
+        st.markdown("---")
+        print("Header displayed successfully", file=sys.stderr)
+    except Exception as e:
+        print(f"ERROR displaying header: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        raise
     
     # Load data with error handling
     try:
+        print("Calling load_data_with_fallback()...", file=sys.stderr)
         df = load_data_with_fallback()
+        print(f"load_data_with_fallback() returned: df is {df is not None}, length={len(df) if df is not None else 0}", file=sys.stderr)
         
         # Check if data was loaded successfully
         if df is None or len(df) == 0:
