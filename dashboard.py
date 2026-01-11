@@ -1708,7 +1708,7 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-    import traceback
+        import traceback
     try:
         st.error("⚠️ **Critical Error: Dashboard failed to load**")
         st.error(f"**Error:** {str(e)}")
