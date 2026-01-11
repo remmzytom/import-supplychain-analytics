@@ -413,6 +413,7 @@ def load_data_from_gcs():
 
 def load_data_from_file(file_path):
     """Load and process data from a CSV file"""
+    import sys
     chunk_size = 100000
     chunks = []
     total_rows = 0
@@ -442,6 +443,25 @@ def load_data_from_file(file_path):
         # Add industry sector if not present
         if 'industry_sector' not in df.columns:
             df['industry_sector'] = df['commodity_code'].apply(map_commodity_code_to_sitc_industry)
+        
+        # Optimize data types to reduce memory usage
+        print("Optimizing data types to reduce memory...", file=sys.stderr)
+        try:
+            # Convert numeric columns to appropriate types
+            if 'year' in df.columns:
+                df['year'] = df['year'].astype('int16')  # Years fit in int16
+            if 'month_number' in df.columns:
+                df['month_number'] = df['month_number'].astype('int8')  # Months fit in int8
+            
+            # Convert float columns to float32 if precision allows
+            float_cols = ['valuecif', 'valuefob', 'weight']
+            for col in float_cols:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], downcast='float')
+            
+            print(f"Memory after optimization: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: Could not optimize data types: {e}", file=sys.stderr)
         
         # Create date column for time series
         df['date'] = pd.to_datetime(
