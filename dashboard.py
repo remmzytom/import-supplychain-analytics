@@ -845,36 +845,36 @@ def show_overview(df):
         print(f"Total records: {total_records}", file=sys.stderr)
         
         with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-card-title">Total Records</div>
-            <div class="metric-card-value">{total_records:,}</div>
-        </div>
-        """, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-card-title">Total Records</div>
+                <div class="metric-card-value">{total_records:,}</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         with col2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-card-title">Total FOB Value</div>
-            <div class="metric-card-value">${total_fob/1e9:.2f}B</div>
-        </div>
-        """, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-card-title">Total FOB Value</div>
+                <div class="metric-card-value">${total_fob/1e9:.2f}B</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         with col3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-card-title">Total CIF Value</div>
-            <div class="metric-card-value">${total_cif/1e9:.2f}B</div>
-        </div>
-        """, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-card-title">Total CIF Value</div>
+                <div class="metric-card-value">${total_cif/1e9:.2f}B</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         with col4:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-card-title">Total Weight</div>
-            <div class="metric-card-value">{total_weight/1e6:.2f}M tonnes</div>
-        </div>
-        """, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-card-title">Total Weight</div>
+                <div class="metric-card-value">{total_weight/1e6:.2f}M tonnes</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         st.markdown("---")
         
