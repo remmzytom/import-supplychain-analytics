@@ -1688,11 +1688,12 @@ def show_key_insights(df):
     with col2:
         st.metric("Top 10 Commodities Share", f"{top_10_commodities_pct:.2f}%")
 
-if __name__ == "__main__":
+# Main execution - always wrap in try-except
+try:
+    main()
+except Exception as e:
+    import traceback
     try:
-        main()
-    except Exception as e:
-        import traceback
         st.error("⚠️ **Critical Error: Dashboard failed to load**")
         st.error(f"**Error:** {str(e)}")
         st.error(f"**Error Type:** {type(e).__name__}")
@@ -1713,6 +1714,10 @@ if __name__ == "__main__":
         3. Ensure data file exists in GCS bucket
         4. Check that all dependencies are in requirements.txt
         """)
-        
-        pass
+    except:
+        # Even error display failed - this shouldn't happen but handle it
+        st.write("Critical error occurred. Check logs for details.")
+        import sys
+        print(f"CRITICAL ERROR: {str(e)}", file=sys.stderr)
+        print(traceback.format_exc(), file=sys.stderr)
 
