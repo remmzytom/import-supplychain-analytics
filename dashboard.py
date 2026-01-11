@@ -495,18 +495,51 @@ def load_data():
 def load_data_with_fallback():
     """Load data with fallback to file uploader
     This function handles widgets and should not be cached
+    Can access st.secrets here since it's not cached
     """
-    # Try to load data (cached function)
+    import sys
+    print("load_data_with_fallback() called", file=sys.stderr)
+    
+    # Try to load data (cached function - only checks local file)
     try:
+        print("Calling load_data()...", file=sys.stderr)
         df = load_data()
+        print(f"load_data() returned: {df is not None}, length={len(df) if df is not None else 0}", file=sys.stderr)
         
         # If data loaded successfully, return it
         if df is not None and len(df) > 0:
+            print("Data loaded successfully from local file, returning dataframe", file=sys.stderr)
             return df
+        else:
+            print("Data is None or empty from load_data()", file=sys.stderr)
     except Exception as e:
+        print(f"ERROR in load_data(): {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         st.warning(f"Error loading data: {str(e)}")
     
+    # Try GCS (can access secrets here since this function is not cached)
+    print("Attempting to load from GCS...", file=sys.stderr)
+    if GCS_AVAILABLE:
+        try:
+            print("Checking for GCS secrets...", file=sys.stderr)
+            # Can access secrets here since this function is not cached
+            if 'gcp' in st.secrets:
+                print("GCP secrets found, calling _load_data_from_gcs_internal()...", file=sys.stderr)
+                gcs_data = _load_data_from_gcs_internal(show_progress=False)
+                print(f"_load_data_from_gcs_internal() returned: {gcs_data is not None}", file=sys.stderr)
+                if gcs_data is not None and len(gcs_data) > 0:
+                    print(f"GCS data loaded successfully, length: {len(gcs_data)}", file=sys.stderr)
+                    return gcs_data
+            else:
+                print("GCP secrets not found", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR loading from GCS: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+    
     # If data not found, show error and offer file uploader
+    print("No data found, showing file uploader", file=sys.stderr)
     st.error("**Data file not found**")
     st.info("""
     **For local development:**
@@ -521,11 +554,15 @@ def load_data_with_fallback():
     uploaded_file = st.file_uploader("Upload cleaned data file (CSV)", type=['csv'])
     if uploaded_file is not None:
         try:
+            print("User uploaded file, loading...", file=sys.stderr)
             with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
                 tmp_file.write(uploaded_file.getvalue())
                 tmp_path = tmp_file.name
             return load_data_from_file(tmp_path)
         except Exception as e:
+            print(f"ERROR loading uploaded file: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
             st.error(f"Error loading uploaded file: {str(e)}")
             return None
     
