@@ -622,35 +622,71 @@ def main():
         return
     
     # Sidebar filters
-    st.sidebar.header("Filters")
-    
-    # Year filter
     try:
-        available_years = sorted(df['year'].unique())
+        print("Setting up sidebar filters...", file=sys.stderr)
+        st.sidebar.header("Filters")
+        
+        # Year filter
+        print("Getting available years...", file=sys.stderr)
+        try:
+            available_years = sorted(df['year'].dropna().unique())
+            print(f"Available years: {list(available_years)[:5]}... (total: {len(available_years)})", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR getting years: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            raise
+        
+        selected_years = st.sidebar.multiselect(
+            "Select Years",
+            options=available_years,
+            default=available_years if len(available_years) <= 10 else available_years[:10]
+        )
+        print(f"Selected years: {selected_years}", file=sys.stderr)
+        
+        # Month filter
+        print("Getting available months...", file=sys.stderr)
+        try:
+            available_months = sorted(df['month'].dropna().unique())
+            print(f"Available months: {list(available_months)[:5]}... (total: {len(available_months)})", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR getting months: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            raise
+        
+        selected_months = st.sidebar.multiselect(
+            "Select Months",
+            options=available_months,
+            default=available_months if len(available_months) <= 12 else available_months[:12]
+        )
+        print(f"Selected months: {selected_months}", file=sys.stderr)
+        
+        # Country filter
+        print("Getting top countries...", file=sys.stderr)
+        try:
+            top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(20).index.tolist()
+            print(f"Top countries: {top_countries[:5]}... (total: {len(top_countries)})", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR getting countries: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            raise
+        
+        selected_countries = st.sidebar.multiselect(
+            "Select Countries (Top 20)",
+            options=top_countries,
+            default=[]
+        )
+        print(f"Selected countries: {selected_countries}", file=sys.stderr)
     except Exception as e:
-        st.error(f"Error accessing year column: {str(e)}")
+        print(f"ERROR setting up filters: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        st.error(f"Error setting up filters: {str(e)}")
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
         return
-    selected_years = st.sidebar.multiselect(
-        "Select Years",
-        options=available_years,
-        default=available_years
-    )
-    
-    # Month filter
-    available_months = sorted(df['month'].unique())
-    selected_months = st.sidebar.multiselect(
-        "Select Months",
-        options=available_months,
-        default=available_months
-    )
-    
-    # Country filter
-    top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(20).index.tolist()
-    selected_countries = st.sidebar.multiselect(
-        "Select Countries (Top 20)",
-        options=top_countries,
-        default=[]
-    )
     
     # Apply filters
     df_filtered = df.copy()
