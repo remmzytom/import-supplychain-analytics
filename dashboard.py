@@ -899,13 +899,13 @@ def show_overview(df):
             try:
                 # Top 5 countries
                 top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(5)
-        fig = px.bar(
-            x=top_countries.values / 1e9,
-            y=top_countries.index,
-            orientation='h',
-            title="Top 5 Countries by Import Value (CIF)",
-            labels={'x': 'Value (Billions AUD)', 'y': 'Country'}
-        )
+                fig = px.bar(
+                    x=top_countries.values / 1e9,
+                    y=top_countries.index,
+                    orientation='h',
+                    title="Top 5 Countries by Import Value (CIF)",
+                    labels={'x': 'Value (Billions AUD)', 'y': 'Country'}
+                )
                 fig = apply_light_theme(fig)
                 fig.update_layout(height=400)
                 st.plotly_chart(fig, use_container_width=True)
