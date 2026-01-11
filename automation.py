@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 import tempfile
 from google.cloud import storage
+from google.cloud import bigquery
 from google.api_core import exceptions as google_exceptions
 import smtplib
 from email.mime.text import MIMEText
@@ -39,6 +40,11 @@ _raw_bucket_name = os.getenv('GCS_BUCKET_NAME', 'freight-import-data')
 GCS_BUCKET_NAME = _raw_bucket_name.strip('"').strip("'").strip()  # Remove quotes and whitespace
 GCS_FILE_NAME = os.getenv('GCS_FILE_NAME', 'imports_2024_2025_cleaned.csv').strip('"').strip("'").strip()
 CHECK_INTERVAL_DAYS = 7  # Check weekly
+
+# BigQuery configuration
+BIGQUERY_DATASET = os.getenv('BIGQUERY_DATASET', 'freight_import_data').strip('"').strip("'").strip()
+BIGQUERY_TABLE = os.getenv('BIGQUERY_TABLE', 'imports_cleaned').strip('"').strip("'").strip()
+BIGQUERY_PROJECT = os.getenv('BIGQUERY_PROJECT', '').strip('"').strip("'").strip()  # Will try to detect from credentials
 
 # Email configuration (from environment variables)
 EMAIL_FROM = os.getenv('EMAIL_FROM')
@@ -460,7 +466,7 @@ def run_automation():
             logger.warning("Continuing with upload despite analysis error...")
             # Don't fail the pipeline if analysis has issues - we still want to upload data
         
-        # Step 6: Upload to GCS
+        # Step 6: Upload to GCS (keep for backup/file storage)
         try:
             upload_to_gcs(str(temp_cleaned_file))
             logger.info("GCS upload completed successfully")
@@ -470,7 +476,20 @@ def run_automation():
             # Don't fail the entire pipeline if upload fails - we can retry
             raise Exception(f"Failed to upload to GCS: {upload_error}")
         
-        # Step 7: Cleanup temporary files
+        # Step 7: Upload to BigQuery (for efficient querying)
+        try:
+            bigquery_success = upload_to_bigquery(str(temp_cleaned_file))
+            if bigquery_success:
+                logger.info("BigQuery upload completed successfully")
+            else:
+                logger.warning("BigQuery upload failed, but GCS upload succeeded")
+        except Exception as bigquery_error:
+            logger.error(f"BigQuery upload failed: {bigquery_error}")
+            logger.exception("BigQuery upload traceback:")
+            # Don't fail the entire pipeline if BigQuery upload fails - GCS is backup
+            logger.warning("BigQuery upload failed, but continuing since GCS upload succeeded")
+        
+        # Step 8: Cleanup temporary files
         if temp_raw_file.exists():
             os.unlink(temp_raw_file)
         if temp_cleaned_file.exists():
@@ -490,8 +509,9 @@ Summary:
 - Total records processed: {len(merged_df):,}
 - Duration: {duration:.1f} minutes
 - Data uploaded to: gs://{GCS_BUCKET_NAME}/{GCS_FILE_NAME}
+- Data uploaded to BigQuery: {BIGQUERY_DATASET}.{BIGQUERY_TABLE}
 
-Dashboard will auto-update on Streamlit Cloud.
+Dashboard will auto-update on Streamlit Cloud and query from BigQuery.
         """
         
         logger.info(message)

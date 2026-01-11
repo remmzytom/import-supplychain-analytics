@@ -26,6 +26,13 @@ try:
     except ImportError:
         GCS_AVAILABLE = False
     
+    # Try to import BigQuery (for efficient querying)
+    try:
+        from google.cloud import bigquery
+        BIGQUERY_AVAILABLE = True
+    except ImportError:
+        BIGQUERY_AVAILABLE = False
+    
     # Add current directory to path for imports
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     
@@ -514,13 +521,36 @@ def load_data():
 
 def load_data_with_fallback():
     """Load data with fallback to file uploader
+    Priority: BigQuery > Local file > GCS > File uploader
     This function handles widgets and should not be cached
     Can access st.secrets here since it's not cached
     """
     import sys
     print("load_data_with_fallback() called", file=sys.stderr)
     
-    # Try to load data (cached function - only checks local file)
+    # Priority 1: Try BigQuery first (most efficient for large datasets)
+    print("Attempting to load from BigQuery...", file=sys.stderr)
+    if BIGQUERY_AVAILABLE:
+        try:
+            print("Checking for BigQuery configuration...", file=sys.stderr)
+            if 'gcp' in st.secrets:
+                print("GCP secrets found, querying BigQuery...", file=sys.stderr)
+                # Query BigQuery with reasonable limit to prevent memory issues
+                # We'll filter further in the dashboard
+                bigquery_data = query_bigquery(limit_rows=2000000)  # 2M rows max
+                print(f"BigQuery query returned: {bigquery_data is not None}, length={len(bigquery_data) if bigquery_data is not None else 0}", file=sys.stderr)
+                if bigquery_data is not None and len(bigquery_data) > 0:
+                    print(f"BigQuery data loaded successfully, length: {len(bigquery_data)}", file=sys.stderr)
+                    return bigquery_data
+            else:
+                print("GCP secrets not found for BigQuery", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR loading from BigQuery: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            # Continue to try other sources
+    
+    # Priority 2: Try to load data (cached function - only checks local file)
     try:
         print("Calling load_data()...", file=sys.stderr)
         df = load_data()
@@ -538,7 +568,7 @@ def load_data_with_fallback():
         traceback.print_exc(file=sys.stderr)
         st.warning(f"Error loading data: {str(e)}")
     
-    # Try GCS (can access secrets here since this function is not cached)
+    # Priority 3: Try GCS (can access secrets here since this function is not cached)
     print("Attempting to load from GCS...", file=sys.stderr)
     if GCS_AVAILABLE:
         try:
