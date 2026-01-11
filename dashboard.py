@@ -497,7 +497,9 @@ def query_bigquery(limit_rows=None, filters=None):
                     months = ', '.join([f"'{m}'" for m in filters['month']])
                     where_conditions.append(f"month IN ({months})")
                 if 'country' in filters and filters['country']:
-                    countries = ', '.join([f"'{c.replace(\"'\", \"''\")}'" for c in filters['country']])
+                    # Escape single quotes in country names for SQL
+                    escaped_countries = [c.replace("'", "''") for c in filters['country']]
+                    countries = ', '.join([f"'{c}'" for c in escaped_countries])
                     where_conditions.append(f"country_description IN ({countries})")
             
             if where_conditions:
