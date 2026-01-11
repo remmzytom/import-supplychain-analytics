@@ -895,8 +895,10 @@ def show_overview(df):
         col1, col2 = st.columns(2)
         
         with col1:
-        # Top 5 countries
-        top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(5)
+            print("Creating top countries chart...", file=sys.stderr)
+            try:
+                # Top 5 countries
+                top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(5)
         fig = px.bar(
             x=top_countries.values / 1e9,
             y=top_countries.index,
@@ -904,12 +906,20 @@ def show_overview(df):
             title="Top 5 Countries by Import Value (CIF)",
             labels={'x': 'Value (Billions AUD)', 'y': 'Country'}
         )
-        fig = apply_light_theme(fig)
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Top 5 commodities
+                fig = apply_light_theme(fig)
+                fig.update_layout(height=400)
+                st.plotly_chart(fig, use_container_width=True)
+                print("Top countries chart created", file=sys.stderr)
+            except Exception as e:
+                print(f"ERROR creating top countries chart: {e}", file=sys.stderr)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
+                st.error(f"Error creating chart: {str(e)}")
+        
+        with col2:
+            print("Creating top commodities chart...", file=sys.stderr)
+            try:
+                # Top 5 commodities
         top_commodities_df = df.groupby('commodity_description')['valuecif'].sum().sort_values(ascending=False).head(5).reset_index()
         top_commodities_df['commodity_label'] = top_commodities_df['commodity_description'].apply(
             lambda x: x[:75] + '...' if len(x) > 75 else x
@@ -928,9 +938,24 @@ def show_overview(df):
         )
         fig.update_traces(hovertemplate='<b>%{customdata[0]}</b><br>Value: %{x:.2f} Billion AUD<extra></extra>',
                           customdata=top_commodities_df[['commodity_description']].values)
-        fig = apply_light_theme(fig)
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
+                fig = apply_light_theme(fig)
+                fig.update_layout(height=400)
+                st.plotly_chart(fig, use_container_width=True)
+                print("Top commodities chart created", file=sys.stderr)
+            except Exception as e:
+                print(f"ERROR creating top commodities chart: {e}", file=sys.stderr)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
+                st.error(f"Error creating chart: {str(e)}")
+        
+        print("show_overview() completed successfully", file=sys.stderr)
+    except Exception as e:
+        print(f"ERROR in show_overview(): {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        st.error(f"Error displaying overview: {str(e)}")
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
 
 def show_time_series(df):
     """Display time series analysis"""
