@@ -692,30 +692,81 @@ def main():
     try:
         print("Applying filters...", file=sys.stderr)
         print(f"Before filtering: {len(df)} rows", file=sys.stderr)
+        print(f"Dataframe memory usage: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB", file=sys.stderr)
         
         # Convert numpy types to Python types for comparison
-        selected_years_py = [int(y) for y in selected_years] if selected_years else []
-        print(f"Selected years (converted): {selected_years_py}", file=sys.stderr)
+        print("Converting year types...", file=sys.stderr)
+        try:
+            selected_years_py = [int(y) for y in selected_years] if selected_years else []
+            print(f"Selected years (converted): {selected_years_py}", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR converting years: {e}", file=sys.stderr)
+            raise
         
-        df_filtered = df.copy()
+        print("Creating dataframe copy...", file=sys.stderr)
+        try:
+            df_filtered = df.copy()
+            print(f"Copy created: {len(df_filtered)} rows", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR copying dataframe: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            raise
+        
         if selected_years:
-            df_filtered = df_filtered[df_filtered['year'].isin(selected_years_py)]
-            print(f"After year filter: {len(df_filtered)} rows", file=sys.stderr)
+            print("Applying year filter...", file=sys.stderr)
+            try:
+                # Ensure year column is numeric
+                if df_filtered['year'].dtype != 'int64':
+                    print(f"Converting year column from {df_filtered['year'].dtype} to int64", file=sys.stderr)
+                    df_filtered['year'] = df_filtered['year'].astype('int64')
+                
+                df_filtered = df_filtered[df_filtered['year'].isin(selected_years_py)]
+                print(f"After year filter: {len(df_filtered)} rows", file=sys.stderr)
+            except Exception as e:
+                print(f"ERROR applying year filter: {e}", file=sys.stderr)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
+                raise
+        
         if selected_months:
-            df_filtered = df_filtered[df_filtered['month'].isin(selected_months)]
-            print(f"After month filter: {len(df_filtered)} rows", file=sys.stderr)
+            print("Applying month filter...", file=sys.stderr)
+            try:
+                df_filtered = df_filtered[df_filtered['month'].isin(selected_months)]
+                print(f"After month filter: {len(df_filtered)} rows", file=sys.stderr)
+            except Exception as e:
+                print(f"ERROR applying month filter: {e}", file=sys.stderr)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
+                raise
+        
         if selected_countries:
-            df_filtered = df_filtered[df_filtered['country_description'].isin(selected_countries)]
-            print(f"After country filter: {len(df_filtered)} rows", file=sys.stderr)
+            print("Applying country filter...", file=sys.stderr)
+            try:
+                df_filtered = df_filtered[df_filtered['country_description'].isin(selected_countries)]
+                print(f"After country filter: {len(df_filtered)} rows", file=sys.stderr)
+            except Exception as e:
+                print(f"ERROR applying country filter: {e}", file=sys.stderr)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
+                raise
         
         print(f"Final filtered dataframe: {len(df_filtered)} rows", file=sys.stderr)
+        print(f"Filtered dataframe memory usage: {df_filtered.memory_usage(deep=True).sum() / 1024**2:.2f} MB", file=sys.stderr)
     except Exception as e:
         print(f"ERROR applying filters: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc(file=sys.stderr)
         st.error(f"Error applying filters: {str(e)}")
+        st.error(f"Error type: {type(e).__name__}")
         with st.expander("Show error details"):
             st.code(traceback.format_exc())
+        st.info("""
+        **Possible solutions:**
+        1. The dataset might be too large for Streamlit Cloud's memory limits
+        2. Try filtering the data before loading (reduce dataset size)
+        3. Check if the year column has the correct data type
+        """)
         return
     
     # Table of Contents for quick navigation
