@@ -594,20 +594,29 @@ def main():
         
         # Check if data was loaded successfully
         if df is None or len(df) == 0:
+            print("Data is None or empty, showing warning", file=sys.stderr)
             st.warning("⚠️ No data available. Please configure data source or upload a file.")
             return
         
+        print(f"Data loaded: {len(df)} rows, columns: {list(df.columns)[:5]}...", file=sys.stderr)
+        
         # Validate required columns exist
+        print("Validating required columns...", file=sys.stderr)
         required_columns = ['year', 'month', 'country_description', 'valuecif', 'valuefob', 'weight']
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
+            print(f"Missing columns: {missing_columns}", file=sys.stderr)
             st.error(f"⚠️ Missing required columns: {', '.join(missing_columns)}")
             st.info("Please ensure your data file contains all required columns.")
             return
+        
+        print("Column validation passed", file=sys.stderr)
             
     except Exception as e:
-        st.error(f"⚠️ Error loading or processing data: {str(e)}")
+        print(f"ERROR in data loading/validation: {e}", file=sys.stderr)
         import traceback
+        traceback.print_exc(file=sys.stderr)
+        st.error(f"⚠️ Error loading or processing data: {str(e)}")
         with st.expander("Show error details"):
             st.code(traceback.format_exc())
         return
