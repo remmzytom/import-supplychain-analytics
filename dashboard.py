@@ -1703,10 +1703,11 @@ def show_key_insights(df):
     with col2:
         st.metric("Top 10 Commodities Share", f"{top_10_commodities_pct:.2f}%")
 
-# Main execution - always wrap in try-except
-try:
-    main()
-except Exception as e:
+# Main execution - wrap everything to catch any errors
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
     import traceback
     try:
         st.error("⚠️ **Critical Error: Dashboard failed to load**")
