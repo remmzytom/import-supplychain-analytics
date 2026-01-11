@@ -920,24 +920,24 @@ def show_overview(df):
             print("Creating top commodities chart...", file=sys.stderr)
             try:
                 # Top 5 commodities
-        top_commodities_df = df.groupby('commodity_description')['valuecif'].sum().sort_values(ascending=False).head(5).reset_index()
-        top_commodities_df['commodity_label'] = top_commodities_df['commodity_description'].apply(
-            lambda x: x[:75] + '...' if len(x) > 75 else x
-        )
-        top_commodities_df['value_billions'] = top_commodities_df['valuecif'] / 1e9
-        fig = px.bar(
-            top_commodities_df,
-            x='value_billions',
-            y='commodity_label',
-            orientation='h',
-            title="Top 5 Commodities by Import Value (CIF)",
-            labels={'value_billions': 'Value (Billions AUD)', 'commodity_label': 'Commodity'},
-            color='value_billions',
-            color_continuous_scale='Blues',
-            hover_data={'commodity_description': True, 'commodity_label': False}
-        )
-        fig.update_traces(hovertemplate='<b>%{customdata[0]}</b><br>Value: %{x:.2f} Billion AUD<extra></extra>',
-                          customdata=top_commodities_df[['commodity_description']].values)
+                top_commodities_df = df.groupby('commodity_description')['valuecif'].sum().sort_values(ascending=False).head(5).reset_index()
+                top_commodities_df['commodity_label'] = top_commodities_df['commodity_description'].apply(
+                    lambda x: x[:75] + '...' if len(x) > 75 else x
+                )
+                top_commodities_df['value_billions'] = top_commodities_df['valuecif'] / 1e9
+                fig = px.bar(
+                    top_commodities_df,
+                    x='value_billions',
+                    y='commodity_label',
+                    orientation='h',
+                    title="Top 5 Commodities by Import Value (CIF)",
+                    labels={'value_billions': 'Value (Billions AUD)', 'commodity_label': 'Commodity'},
+                    color='value_billions',
+                    color_continuous_scale='Blues',
+                    hover_data={'commodity_description': True, 'commodity_label': False}
+                )
+                fig.update_traces(hovertemplate='<b>%{customdata[0]}</b><br>Value: %{x:.2f} Billion AUD<extra></extra>',
+                                  customdata=top_commodities_df[['commodity_description']].values)
                 fig = apply_light_theme(fig)
                 fig.update_layout(height=400)
                 st.plotly_chart(fig, use_container_width=True)
