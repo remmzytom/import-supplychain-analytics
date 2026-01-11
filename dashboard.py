@@ -843,49 +843,58 @@ def show_overview(df):
         
         total_records = len(df)
         print(f"Total records: {total_records}", file=sys.stderr)
-    
-    with col1:
+        
+        with col1:
         st.markdown(f"""
         <div class="metric-card">
             <div class="metric-card-title">Total Records</div>
             <div class="metric-card-value">{total_records:,}</div>
         </div>
         """, unsafe_allow_html=True)
-    
-    with col2:
+        
+        with col2:
         st.markdown(f"""
         <div class="metric-card">
             <div class="metric-card-title">Total FOB Value</div>
             <div class="metric-card-value">${total_fob/1e9:.2f}B</div>
         </div>
         """, unsafe_allow_html=True)
-    
-    with col3:
+        
+        with col3:
         st.markdown(f"""
         <div class="metric-card">
             <div class="metric-card-title">Total CIF Value</div>
             <div class="metric-card-value">${total_cif/1e9:.2f}B</div>
         </div>
         """, unsafe_allow_html=True)
-    
-    with col4:
+        
+        with col4:
         st.markdown(f"""
         <div class="metric-card">
             <div class="metric-card-title">Total Weight</div>
             <div class="metric-card-value">{total_weight/1e6:.2f}M tonnes</div>
         </div>
         """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Year range
-    year_range = f"{df['year'].min():.0f} - {df['year'].max():.0f}"
-    st.info(f"Date Range: {year_range}")
-    
-    # Quick summary charts
-    col1, col2 = st.columns(2)
-    
-    with col1:
+        
+        st.markdown("---")
+        
+        # Year range
+        print("Calculating year range...", file=sys.stderr)
+        try:
+            year_min = float(df['year'].min())
+            year_max = float(df['year'].max())
+            year_range = f"{year_min:.0f} - {year_max:.0f}"
+            st.info(f"Date Range: {year_range}")
+            print(f"Year range: {year_range}", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR calculating year range: {e}", file=sys.stderr)
+            st.info("Date Range: Unable to calculate")
+        
+        # Quick summary charts
+        print("Creating summary charts...", file=sys.stderr)
+        col1, col2 = st.columns(2)
+        
+        with col1:
         # Top 5 countries
         top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(5)
         fig = px.bar(
