@@ -53,16 +53,21 @@ def apply_light_theme(fig):
     )
     return fig
 
-# Page configuration
-st.set_page_config(
-    page_title="Freight Import Data Dashboard",
-    page_icon=None,
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Page configuration (wrap in try-except to prevent crashes)
+try:
+    st.set_page_config(
+        page_title="Freight Import Data Dashboard",
+        page_icon=None,
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+except Exception:
+    # Page config already set, ignore
+    pass
 
-# Custom CSS
-st.markdown("""
+# Custom CSS (wrap in try-except to prevent crashes)
+try:
+    st.markdown("""
     <style>
     /* Light Background */
     .main {
@@ -1706,5 +1711,5 @@ if __name__ == "__main__":
         4. Check that all dependencies are in requirements.txt
         """)
         
-        st.stop()
+        pass
 
