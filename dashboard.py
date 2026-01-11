@@ -703,12 +703,14 @@ def main():
             print(f"ERROR converting years: {e}", file=sys.stderr)
             raise
         
-        print("Creating dataframe copy...", file=sys.stderr)
+        # Apply filters incrementally without copying first (more memory efficient)
+        print("Building filter mask...", file=sys.stderr)
         try:
-            df_filtered = df.copy()
-            print(f"Copy created: {len(df_filtered)} rows", file=sys.stderr)
+            # Start with all True (no filter)
+            mask = pd.Series(True, index=df.index)
+            print(f"Initial mask created: {len(mask)} rows", file=sys.stderr)
         except Exception as e:
-            print(f"ERROR copying dataframe: {e}", file=sys.stderr)
+            print(f"ERROR creating mask: {e}", file=sys.stderr)
             import traceback
             traceback.print_exc(file=sys.stderr)
             raise
@@ -717,12 +719,13 @@ def main():
             print("Applying year filter...", file=sys.stderr)
             try:
                 # Ensure year column is numeric
-                if df_filtered['year'].dtype != 'int64':
-                    print(f"Converting year column from {df_filtered['year'].dtype} to int64", file=sys.stderr)
-                    df_filtered['year'] = df_filtered['year'].astype('int64')
+                if df['year'].dtype != 'int64':
+                    print(f"Converting year column from {df['year'].dtype} to int64", file=sys.stderr)
+                    df['year'] = df['year'].astype('int64')
                 
-                df_filtered = df_filtered[df_filtered['year'].isin(selected_years_py)]
-                print(f"After year filter: {len(df_filtered)} rows", file=sys.stderr)
+                year_mask = df['year'].isin(selected_years_py)
+                mask = mask & year_mask
+                print(f"Year filter applied: {mask.sum()} rows match", file=sys.stderr)
             except Exception as e:
                 print(f"ERROR applying year filter: {e}", file=sys.stderr)
                 import traceback
@@ -732,8 +735,9 @@ def main():
         if selected_months:
             print("Applying month filter...", file=sys.stderr)
             try:
-                df_filtered = df_filtered[df_filtered['month'].isin(selected_months)]
-                print(f"After month filter: {len(df_filtered)} rows", file=sys.stderr)
+                month_mask = df['month'].isin(selected_months)
+                mask = mask & month_mask
+                print(f"Month filter applied: {mask.sum()} rows match", file=sys.stderr)
             except Exception as e:
                 print(f"ERROR applying month filter: {e}", file=sys.stderr)
                 import traceback
@@ -743,13 +747,24 @@ def main():
         if selected_countries:
             print("Applying country filter...", file=sys.stderr)
             try:
-                df_filtered = df_filtered[df_filtered['country_description'].isin(selected_countries)]
-                print(f"After country filter: {len(df_filtered)} rows", file=sys.stderr)
+                country_mask = df['country_description'].isin(selected_countries)
+                mask = mask & country_mask
+                print(f"Country filter applied: {mask.sum()} rows match", file=sys.stderr)
             except Exception as e:
                 print(f"ERROR applying country filter: {e}", file=sys.stderr)
                 import traceback
                 traceback.print_exc(file=sys.stderr)
                 raise
+        
+        print("Applying final filter to dataframe...", file=sys.stderr)
+        try:
+            df_filtered = df[mask].copy()
+            print(f"Filtered dataframe created: {len(df_filtered)} rows", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR creating filtered dataframe: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            raise
         
         print(f"Final filtered dataframe: {len(df_filtered)} rows", file=sys.stderr)
         print(f"Filtered dataframe memory usage: {df_filtered.memory_usage(deep=True).sum() / 1024**2:.2f} MB", file=sys.stderr)
