@@ -259,6 +259,9 @@ try:
     }
     </style>
 """, unsafe_allow_html=True)
+except Exception:
+    # CSS failed to load, continue without it
+    pass
 
 def _load_data_from_gcs_internal(show_progress=False):
     """Internal function to load data from GCS without Streamlit widgets
