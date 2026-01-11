@@ -689,41 +689,81 @@ def main():
         return
     
     # Apply filters
-    df_filtered = df.copy()
-    if selected_years:
-        df_filtered = df_filtered[df_filtered['year'].isin(selected_years)]
-    if selected_months:
-        df_filtered = df_filtered[df_filtered['month'].isin(selected_months)]
-    if selected_countries:
-        df_filtered = df_filtered[df_filtered['country_description'].isin(selected_countries)]
+    try:
+        print("Applying filters...", file=sys.stderr)
+        print(f"Before filtering: {len(df)} rows", file=sys.stderr)
+        
+        # Convert numpy types to Python types for comparison
+        selected_years_py = [int(y) for y in selected_years] if selected_years else []
+        print(f"Selected years (converted): {selected_years_py}", file=sys.stderr)
+        
+        df_filtered = df.copy()
+        if selected_years:
+            df_filtered = df_filtered[df_filtered['year'].isin(selected_years_py)]
+            print(f"After year filter: {len(df_filtered)} rows", file=sys.stderr)
+        if selected_months:
+            df_filtered = df_filtered[df_filtered['month'].isin(selected_months)]
+            print(f"After month filter: {len(df_filtered)} rows", file=sys.stderr)
+        if selected_countries:
+            df_filtered = df_filtered[df_filtered['country_description'].isin(selected_countries)]
+            print(f"After country filter: {len(df_filtered)} rows", file=sys.stderr)
+        
+        print(f"Final filtered dataframe: {len(df_filtered)} rows", file=sys.stderr)
+    except Exception as e:
+        print(f"ERROR applying filters: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        st.error(f"Error applying filters: {str(e)}")
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
+        return
     
     # Table of Contents for quick navigation
-    st.markdown("---")
-    st.markdown("### Table of Contents")
-    toc_cols = st.columns(4)
-    
-    sections_list = [
-        ("Overview", "overview"),
-        ("Time Series", "time-series"),
-        ("Geographic", "geographic"),
-        ("Commodity", "commodity"),
-        ("Value vs Volume", "value-volume"),
-        ("Risk Analysis", "risk"),
-        ("Transport Mode", "transport"),
-        ("Key Insights", "insights")
-    ]
-    
-    for idx, (name, anchor) in enumerate(sections_list):
-        with toc_cols[idx % 4]:
-            st.markdown(f"[{name}](#{anchor})")
-    
-    st.markdown("---")
+    try:
+        print("Creating table of contents...", file=sys.stderr)
+        st.markdown("---")
+        st.markdown("### Table of Contents")
+        toc_cols = st.columns(4)
+        
+        sections_list = [
+            ("Overview", "overview"),
+            ("Time Series", "time-series"),
+            ("Geographic", "geographic"),
+            ("Commodity", "commodity"),
+            ("Value vs Volume", "value-volume"),
+            ("Risk Analysis", "risk"),
+            ("Transport Mode", "transport"),
+            ("Key Insights", "insights")
+        ]
+        
+        for idx, (name, anchor) in enumerate(sections_list):
+            with toc_cols[idx % 4]:
+                st.markdown(f"[{name}](#{anchor})")
+        
+        st.markdown("---")
+        print("Table of contents created", file=sys.stderr)
+    except Exception as e:
+        print(f"ERROR creating table of contents: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        st.error(f"Error creating navigation: {str(e)}")
+        return
     
     # Display all sections on the same page
-    
-    # 1. Overview Section
-    st.markdown('<div id="overview"></div>', unsafe_allow_html=True)
-    show_overview(df_filtered)
+    try:
+        print("Displaying Overview section...", file=sys.stderr)
+        # 1. Overview Section
+        st.markdown('<div id="overview"></div>', unsafe_allow_html=True)
+        show_overview(df_filtered)
+        print("Overview section displayed", file=sys.stderr)
+    except Exception as e:
+        print(f"ERROR displaying Overview section: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        st.error(f"Error displaying Overview: {str(e)}")
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
+        return
     
     st.markdown("---")
     
@@ -769,15 +809,40 @@ def main():
 
 def show_overview(df):
     """Display overview metrics"""
-    st.markdown('<h2 class="section-header">Overview</h2>', unsafe_allow_html=True)
+    import sys
+    print("show_overview() called", file=sys.stderr)
     
-    # Key metrics in cards
-    col1, col2, col3, col4 = st.columns(4)
-    
-    total_fob = df['valuefob'].sum()
-    total_cif = df['valuecif'].sum()
-    total_weight = df['weight'].sum()
-    total_records = len(df)
+    try:
+        st.markdown('<h2 class="section-header">Overview</h2>', unsafe_allow_html=True)
+        
+        # Key metrics in cards
+        print("Creating metric columns...", file=sys.stderr)
+        col1, col2, col3, col4 = st.columns(4)
+        
+        print("Calculating totals...", file=sys.stderr)
+        try:
+            total_fob = float(df['valuefob'].sum())
+            print(f"Total FOB: {total_fob}", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR calculating total_fob: {e}", file=sys.stderr)
+            total_fob = 0.0
+        
+        try:
+            total_cif = float(df['valuecif'].sum())
+            print(f"Total CIF: {total_cif}", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR calculating total_cif: {e}", file=sys.stderr)
+            total_cif = 0.0
+        
+        try:
+            total_weight = float(df['weight'].sum())
+            print(f"Total weight: {total_weight}", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR calculating total_weight: {e}", file=sys.stderr)
+            total_weight = 0.0
+        
+        total_records = len(df)
+        print(f"Total records: {total_records}", file=sys.stderr)
     
     with col1:
         st.markdown(f"""
