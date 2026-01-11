@@ -4,40 +4,55 @@ Interactive dashboard displaying all visualizations from the analysis notebook
 Updated: 2025-01-10
 """
 
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import warnings
-from datetime import datetime
-import sys
-import os
-import tempfile
-import json
-
-# Try to import Google Cloud Storage (optional - for Streamlit Cloud)
+# Wrap all imports in try-except to prevent silent crashes
 try:
-    from google.cloud import storage
-    GCS_AVAILABLE = True
-except ImportError:
-    GCS_AVAILABLE = False
-
-# Add current directory to path for imports
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-# Import commodity mapping (optional - provide fallback)
-try:
-    from commodity_code_mapping import map_commodity_code_to_sitc_industry
-    COMMODITY_MAPPING_AVAILABLE = True
-except ImportError:
-    COMMODITY_MAPPING_AVAILABLE = False
-    # Fallback function if mapping is not available
-    def map_commodity_code_to_sitc_industry(code):
-        return "Unknown"
-
-warnings.filterwarnings('ignore')
+    import streamlit as st
+    import pandas as pd
+    import numpy as np
+    import plotly.express as px
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    import warnings
+    from datetime import datetime
+    import sys
+    import os
+    import tempfile
+    import json
+    
+    # Try to import Google Cloud Storage (optional - for Streamlit Cloud)
+    try:
+        from google.cloud import storage
+        GCS_AVAILABLE = True
+    except ImportError:
+        GCS_AVAILABLE = False
+    
+    # Add current directory to path for imports
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    
+    # Import commodity mapping (optional - provide fallback)
+    try:
+        from commodity_code_mapping import map_commodity_code_to_sitc_industry
+        COMMODITY_MAPPING_AVAILABLE = True
+    except ImportError:
+        COMMODITY_MAPPING_AVAILABLE = False
+        # Fallback function if mapping is not available
+        def map_commodity_code_to_sitc_industry(code):
+            return "Unknown"
+    
+    warnings.filterwarnings('ignore')
+except Exception as e:
+    # If imports fail, we can't use st.error, so print to stderr
+    import sys
+    print(f"CRITICAL: Import failed: {e}", file=sys.stderr)
+    import traceback
+    traceback.print_exc(file=sys.stderr)
+    # Try to import streamlit at least to show error
+    try:
+        import streamlit as st
+        st.error(f"Failed to import required modules: {e}")
+        st.stop()
+    except:
+        raise
 
 # Light Theme Function for Plotly Charts
 def apply_light_theme(fig):
