@@ -469,9 +469,17 @@ def send_email_notification(success=True, message=""):
     """Send email notification about automation status"""
     if not EMAIL_FROM or not EMAIL_TO or not EMAIL_PASSWORD:
         logger.warning("Email not configured. Skipping notification.")
+        logger.warning(f"EMAIL_FROM: {'Set' if EMAIL_FROM else 'Not set'}")
+        logger.warning(f"EMAIL_TO: {'Set' if EMAIL_TO else 'Not set'}")
+        logger.warning(f"EMAIL_PASSWORD: {'Set' if EMAIL_PASSWORD else 'Not set'}")
         return
     
     try:
+        logger.info("Preparing email notification...")
+        logger.info(f"SMTP Server: {SMTP_SERVER}:{SMTP_PORT}")
+        logger.info(f"From: {EMAIL_FROM}")
+        logger.info(f"To: {EMAIL_TO}")
+        
         msg = MIMEMultipart()
         msg['From'] = EMAIL_FROM
         msg['To'] = EMAIL_TO
@@ -492,15 +500,46 @@ This is an automated message from the Freight Import Data Pipeline.
         
         msg.attach(MIMEText(body, 'plain'))
         
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        logger.info("Connecting to SMTP server...")
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30)
+        
+        logger.info("Starting TLS...")
         server.starttls()
+        
+        logger.info("Logging in to SMTP server...")
         server.login(EMAIL_FROM, EMAIL_PASSWORD)
+        
+        logger.info("Sending email message...")
         server.send_message(msg)
+        
+        logger.info("Closing SMTP connection...")
         server.quit()
         
         logger.info("Email notification sent successfully")
+    except smtplib.SMTPException as e:
+        logger.error("=" * 60)
+        logger.error("SMTP ERROR - Email notification failed")
+        logger.error("=" * 60)
+        logger.error(f"SMTP Error Type: {type(e).__name__}")
+        logger.error(f"SMTP Error Message: {str(e)}")
+        logger.error(f"SMTP Server: {SMTP_SERVER}:{SMTP_PORT}")
+        logger.error(f"From: {EMAIL_FROM}")
+        logger.error(f"To: {EMAIL_TO}")
+        import traceback
+        logger.error("Full SMTP traceback:")
+        logger.error(traceback.format_exc())
     except Exception as e:
-        logger.error(f"Error sending email notification: {e}")
+        logger.error("=" * 60)
+        logger.error("ERROR - Email notification failed")
+        logger.error("=" * 60)
+        logger.error(f"Error Type: {type(e).__name__}")
+        logger.error(f"Error Message: {str(e)}")
+        logger.error(f"SMTP Server: {SMTP_SERVER}:{SMTP_PORT}")
+        logger.error(f"From: {EMAIL_FROM}")
+        logger.error(f"To: {EMAIL_TO}")
+        import traceback
+        logger.error("Full traceback:")
+        logger.error(traceback.format_exc())
 
 
 def run_automation():
