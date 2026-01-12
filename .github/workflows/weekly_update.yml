@@ -36,6 +36,9 @@ jobs:
         GOOGLE_APPLICATION_CREDENTIALS: gcp_credentials.json
         GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
         GCS_FILE_NAME: ${{ secrets.GCS_FILE_NAME }}
+        BIGQUERY_DATASET: ${{ secrets.BIGQUERY_DATASET }}
+        BIGQUERY_TABLE: ${{ secrets.BIGQUERY_TABLE }}
+        BIGQUERY_PROJECT: ${{ secrets.BIGQUERY_PROJECT }}
         EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
         EMAIL_TO: ${{ secrets.EMAIL_TO }}
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}

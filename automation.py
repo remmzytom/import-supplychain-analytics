@@ -374,6 +374,97 @@ Original error: {str(perm_error)}
         raise
 
 
+def upload_to_bigquery(file_path):
+    """Upload cleaned data file to BigQuery table"""
+    try:
+        logger.info(f"Uploading {file_path} to BigQuery...")
+        
+        # Get BigQuery configuration
+        dataset_id = BIGQUERY_DATASET
+        table_id = BIGQUERY_TABLE
+        
+        logger.info(f"BigQuery Dataset: {dataset_id}")
+        logger.info(f"BigQuery Table: {table_id}")
+        
+        # Initialize BigQuery client
+        creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+        if creds_path and os.path.exists(creds_path):
+            logger.info(f"Using credentials from: {creds_path}")
+            client = bigquery.Client.from_service_account_json(creds_path)
+            # Get project ID from credentials if not set
+            if not BIGQUERY_PROJECT:
+                import json
+                with open(creds_path, 'r') as f:
+                    creds_data = json.load(f)
+                    project_id = creds_data.get('project_id')
+                    if project_id:
+                        client.project = project_id
+                        logger.info(f"Using project ID from credentials: {project_id}")
+        else:
+            logger.info("Using default credentials")
+            client = bigquery.Client()
+        
+        project_id = client.project or BIGQUERY_PROJECT
+        if not project_id:
+            raise ValueError("BigQuery project ID not found. Set BIGQUERY_PROJECT environment variable.")
+        
+        logger.info(f"Using project: {project_id}")
+        
+        # Construct full table reference
+        table_ref = f"{project_id}.{dataset_id}.{table_id}"
+        logger.info(f"Full table reference: {table_ref}")
+        
+        # Check if dataset exists, create if not
+        try:
+            dataset = client.get_dataset(dataset_id)
+            logger.info(f"Dataset '{dataset_id}' already exists")
+        except Exception:
+            logger.info(f"Creating dataset '{dataset_id}'...")
+            dataset = bigquery.Dataset(f"{project_id}.{dataset_id}")
+            dataset.location = "US"  # Set location
+            dataset = client.create_dataset(dataset, exists_ok=True)
+            logger.info(f"Dataset '{dataset_id}' created")
+        
+        # Configure load job
+        job_config = bigquery.LoadJobConfig(
+            source_format=bigquery.SourceFormat.CSV,
+            skip_leading_rows=1,  # Skip header row
+            autodetect=True,  # Auto-detect schema
+            write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,  # Replace table contents
+            allow_quoted_newlines=True,
+        )
+        
+        # Load data from CSV file
+        logger.info(f"Loading data from {file_path} to {table_ref}...")
+        with open(file_path, "rb") as source_file:
+            job = client.load_table_from_file(source_file, table_ref, job_config=job_config)
+        
+        # Wait for job to complete
+        logger.info(f"BigQuery load job started: {job.job_id}")
+        job.result()  # Wait for the job to complete
+        
+        # Get table info
+        table = client.get_table(table_ref)
+        logger.info(f"Successfully loaded {table.num_rows:,} rows to {table_ref}")
+        logger.info(f"Table size: {table.num_bytes / (1024**2):.2f} MB")
+        
+        return True
+        
+    except Exception as e:
+        logger.error("=" * 60)
+        logger.error("BIGQUERY UPLOAD ERROR")
+        logger.error("=" * 60)
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error message: {str(e)}")
+        logger.error(f"Dataset: {BIGQUERY_DATASET}")
+        logger.error(f"Table: {BIGQUERY_TABLE}")
+        logger.error(f"Project: {BIGQUERY_PROJECT or 'Auto-detect'}")
+        logger.exception("Full traceback:")
+        # Don't fail the entire pipeline if BigQuery upload fails
+        logger.warning("BigQuery upload failed, but continuing with GCS upload...")
+        return False
+
+
 def send_email_notification(success=True, message=""):
     """Send email notification about automation status"""
     if not EMAIL_FROM or not EMAIL_TO or not EMAIL_PASSWORD:
