@@ -554,12 +554,19 @@ def run_automation():
         if not has_new_data and not bigquery_table_exists:
             logger.info("No new data detected, but BigQuery table doesn't exist.")
             logger.info("Processing existing data to create BigQuery table (initial setup)...")
-            # Continue with processing to upload to BigQuery
-        
-        # Step 2: Download and merge data
-        merged_df = download_and_merge_data()
-        if merged_df is None:
-            raise Exception("Failed to download/merge data")
+            # For initial BigQuery setup, download fresh data to get full dataset
+            logger.info("Downloading full dataset for BigQuery initial upload...")
+            new_df = extract_imports_2024_2025()
+            if new_df is None or len(new_df) == 0:
+                raise Exception("Failed to download data for BigQuery setup")
+            logger.info(f"Downloaded {len(new_df):,} records for BigQuery upload")
+            # Use the full downloaded dataset (not merged with existing)
+            merged_df = new_df
+        else:
+            # Step 2: Download and merge data (normal flow)
+            merged_df = download_and_merge_data()
+            if merged_df is None:
+                raise Exception("Failed to download/merge data")
         
         # Step 3: Save merged data temporarily
         DATA_DIR.mkdir(exist_ok=True)
@@ -598,10 +605,16 @@ def run_automation():
             raise Exception(f"Failed to upload to GCS: {upload_error}")
         
         # Step 7: Upload to BigQuery (for efficient querying)
+        # Upload the cleaned file (which has deduplicated data)
+        # Note: If you want the full dataset without deduplication, upload temp_raw_file instead
         try:
+            # Check if BigQuery table exists and has fewer rows than expected
+            # If so, we might want to upload the full dataset
             bigquery_success = upload_to_bigquery(str(temp_cleaned_file))
             if bigquery_success:
                 logger.info("BigQuery upload completed successfully")
+                # Log row count for verification
+                logger.info(f"Uploaded {len(pd.read_csv(temp_cleaned_file, nrows=1)) if temp_cleaned_file.exists() else 0:,} rows to BigQuery")
             else:
                 logger.warning("BigQuery upload failed, but GCS upload succeeded")
         except Exception as bigquery_error:
