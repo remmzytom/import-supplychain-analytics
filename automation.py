@@ -429,11 +429,41 @@ def run_automation():
         # Step 1: Check for new data
         has_new_data, last_modified, latest_data_date = check_for_new_data()
         
-        if not has_new_data:
+        # Check if BigQuery table exists (for initial setup)
+        bigquery_table_exists = False
+        try:
+            creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            if creds_path and os.path.exists(creds_path):
+                bq_client = bigquery.Client.from_service_account_json(creds_path)
+            else:
+                bq_client = bigquery.Client()
+            
+            project_id = bq_client.project or BIGQUERY_PROJECT
+            if project_id:
+                table_ref = f"{project_id}.{BIGQUERY_DATASET}.{BIGQUERY_TABLE}"
+                try:
+                    bq_client.get_table(table_ref)
+                    bigquery_table_exists = True
+                    logger.info(f"BigQuery table exists: {table_ref}")
+                except Exception:
+                    logger.info(f"BigQuery table does not exist: {table_ref}")
+                    bigquery_table_exists = False
+        except Exception as e:
+            logger.warning(f"Could not check BigQuery table existence: {e}")
+            bigquery_table_exists = False
+        
+        # If no new data AND BigQuery table exists, skip processing
+        if not has_new_data and bigquery_table_exists:
             message = f"No new data detected. Last modified: {last_modified}"
             logger.info(message)
             send_email_notification(success=True, message=message)
             return True
+        
+        # If no new data BUT BigQuery table doesn't exist, process anyway (initial setup)
+        if not has_new_data and not bigquery_table_exists:
+            logger.info("No new data detected, but BigQuery table doesn't exist.")
+            logger.info("Processing existing data to create BigQuery table (initial setup)...")
+            # Continue with processing to upload to BigQuery
         
         # Step 2: Download and merge data
         merged_df = download_and_merge_data()
