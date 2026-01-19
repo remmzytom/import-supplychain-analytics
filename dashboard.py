@@ -42,6 +42,13 @@ try:
 except ImportError:
     GCS_AVAILABLE = False
 
+# Try to import BigQuery (for efficient querying of large datasets)
+try:
+    from google.cloud import bigquery
+    BIGQUERY_AVAILABLE = True
+except ImportError:
+    BIGQUERY_AVAILABLE = False
+
 # Add current directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -281,6 +288,133 @@ def load_data_from_gcs():
     """Load data from Google Cloud Storage (with progress indicators)"""
     return _load_data_from_gcs_internal(show_progress=True)
 
+@st.cache_data(ttl=600)  # Cache for 10 minutes
+def query_bigquery(filters=None):
+    """Query data from BigQuery with optional filters
+    This is much more memory-efficient for large datasets
+    
+    Args:
+        filters: Dict of filters like {'year': [2024, 2025], 'month': ['January', 'February'], 'country': ['China']}
+    
+    Returns:
+        pandas.DataFrame or None
+    """
+    if not BIGQUERY_AVAILABLE:
+        return None
+    
+    try:
+        # Safely check for secrets
+        try:
+            if 'gcp' not in st.secrets:
+                return None
+        except (AttributeError, RuntimeError, Exception):
+            return None
+        
+        gcp_config = st.secrets['gcp']
+        dataset_id = gcp_config.get('bigquery_dataset', 'freight_import_data')
+        table_id = gcp_config.get('bigquery_table', 'imports_cleaned')
+        project_id = gcp_config.get('bigquery_project', '').strip()
+        
+        # Treat placeholder values as empty
+        if project_id.lower() in ['your-project-id', 'your-project', '']:
+            project_id = ''
+        
+        # Get credentials from secrets
+        if 'credentials' not in gcp_config:
+            return None
+        
+        # Create credentials dict from secrets
+        credentials_dict = dict(gcp_config['credentials'])
+        
+        # Create temporary file for credentials
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as creds_file:
+            json.dump(credentials_dict, creds_file)
+            creds_path = creds_file.name
+        
+        try:
+            # Initialize BigQuery client
+            if project_id:
+                client = bigquery.Client.from_service_account_json(creds_path, project=project_id)
+            else:
+                client = bigquery.Client.from_service_account_json(creds_path)
+            
+            # Get project ID from credentials if not set
+            if not project_id:
+                with open(creds_path, 'r') as f:
+                    creds_data = json.load(f)
+                    project_id = creds_data.get('project_id')
+                    if project_id:
+                        client.project = project_id
+            
+            # Also try to get from client if still not set
+            if not project_id and hasattr(client, 'project') and client.project:
+                project_id = client.project
+            
+            if not project_id:
+                return None
+            
+            # Build query with filters
+            table_ref = f"{project_id}.{dataset_id}.{table_id}"
+            query = f"SELECT * FROM `{table_ref}`"
+            
+            # Add WHERE conditions based on filters
+            where_conditions = []
+            if filters:
+                if 'year' in filters and filters['year']:
+                    years = ', '.join([str(y) for y in filters['year']])
+                    where_conditions.append(f"year IN ({years})")
+                if 'month' in filters and filters['month']:
+                    # Escape single quotes in month names
+                    months = ', '.join([f"'{m.replace(\"'\", \"''\")}'" for m in filters['month']])
+                    where_conditions.append(f"month IN ({months})")
+                if 'country' in filters and filters['country']:
+                    # Escape single quotes in country names
+                    countries = ', '.join([f"'{c.replace(\"'\", \"''\")}'" for c in filters['country']])
+                    where_conditions.append(f"country_description IN ({countries})")
+            
+            if where_conditions:
+                query += " WHERE " + " AND ".join(where_conditions)
+            
+            # Execute query
+            query_job = client.query(query)
+            df = query_job.to_dataframe()
+            
+            # Optimize data types after loading
+            if 'year' in df.columns:
+                df['year'] = df['year'].astype('int16')
+            if 'month_number' in df.columns:
+                df['month_number'] = df['month_number'].astype('int8')
+            
+            float_cols = ['valuecif', 'valuefob', 'weight', 'quantity']
+            for col in float_cols:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], downcast='float')
+            
+            # Add industry sector if not present
+            if 'industry_sector' not in df.columns:
+                if COMMODITY_MAPPING_AVAILABLE:
+                    df['industry_sector'] = df['commodity_code'].apply(map_commodity_code_to_sitc_industry)
+                else:
+                    df['industry_sector'] = "Unknown"
+            
+            # Create date column for time series
+            if 'year' in df.columns and 'month_number' in df.columns:
+                df['date'] = pd.to_datetime(
+                    df['year'].astype(str) + '-' + 
+                    df['month_number'].astype(str).str.zfill(2) + '-01'
+                )
+            
+            return df
+            
+        finally:
+            # Clean up credentials file
+            if os.path.exists(creds_path):
+                os.unlink(creds_path)
+                
+    except Exception as e:
+        # Silently fail - will fall back to GCS/CSV
+        return None
+
 def load_data_from_file(file_path, max_rows=None):
     """Load and process data from a CSV file with memory optimization
     
@@ -423,17 +557,41 @@ def load_data():
 
 def load_data_with_fallback():
     """Load data with fallback to file uploader
+    Priority: BigQuery > Local file > GCS > File uploader
     This function handles widgets and should not be cached
     Can access st.secrets here since it's not cached
     """
-    # Try to load data (cached function - only checks local file)
+    # Priority 1: Try BigQuery first (most efficient for large datasets)
+    if BIGQUERY_AVAILABLE:
+        try:
+            # Check if BigQuery is configured
+            if 'gcp' in st.secrets:
+                gcp_config = st.secrets['gcp']
+                if 'bigquery_dataset' in gcp_config and 'bigquery_table' in gcp_config:
+                    st.info("🔍 Querying BigQuery for full dataset...")
+                    st.info("This will load all data efficiently without memory limits.")
+                    
+                    # Query BigQuery without filters initially (load all data)
+                    # Filters will be applied in the dashboard UI
+                    bigquery_data = query_bigquery(filters=None)
+                    
+                    if bigquery_data is not None and len(bigquery_data) > 0:
+                        st.success(f"✅ Loaded {len(bigquery_data):,} rows from BigQuery!")
+                        return bigquery_data
+                    else:
+                        st.warning("BigQuery query returned no data. Trying other sources...")
+        except Exception as e:
+            # Continue to other sources if BigQuery fails
+            st.warning(f"BigQuery query failed: {str(e)}. Trying other sources...")
+    
+    # Priority 2: Try to load data (cached function - only checks local file)
     df = load_data()
     
     # If data loaded successfully, return it
     if df is not None and len(df) > 0:
         return df
     
-    # If local file not found, try GCS directly (can use st.secrets here)
+    # Priority 3: Try GCS directly (can use st.secrets here)
     if GCS_AVAILABLE:
         try:
             # Can access secrets here since this function is not cached
