@@ -289,12 +289,13 @@ def load_data_from_gcs():
     return _load_data_from_gcs_internal(show_progress=True)
 
 @st.cache_data(ttl=600)  # Cache for 10 minutes
-def query_bigquery(filters=None):
-    """Query data from BigQuery with optional filters
+def query_bigquery(filters=None, limit_rows=None):
+    """Query data from BigQuery with optional filters and row limit
     This is much more memory-efficient for large datasets
     
     Args:
         filters: Dict of filters like {'year': [2024, 2025], 'month': ['January', 'February'], 'country': ['China']}
+        limit_rows: Maximum number of rows to return (None = no limit, but recommended to use limit for large datasets)
     
     Returns:
         pandas.DataFrame or None
@@ -377,9 +378,51 @@ def query_bigquery(filters=None):
             if where_conditions:
                 query += " WHERE " + " AND ".join(where_conditions)
             
-            # Execute query
+            # Add LIMIT as safety net (even with filters, limit prevents extreme cases)
+            # Default limit of 2M rows for reasonable load time
+            if limit_rows is None:
+                limit_rows = 2000000  # 2M rows default
+            
+            query += f" LIMIT {limit_rows}"
+            
+            # Execute query with timeout protection
+            import time
+            import signal
+            
+            st.info(f"Executing BigQuery query (this may take 1-3 minutes)...")
             query_job = client.query(query)
-            df = query_job.to_dataframe()
+            
+            # Wait for query to complete with timeout (3 minutes max)
+            timeout_seconds = 180  # 3 minute timeout
+            
+            try:
+                # Poll for completion with timeout
+                start_time = time.time()
+                while not query_job.done():
+                    elapsed = time.time() - start_time
+                    if elapsed > timeout_seconds:
+                        query_job.cancel()
+                        raise TimeoutError(f"Query exceeded {timeout_seconds} second timeout")
+                    time.sleep(2)  # Check every 2 seconds
+                
+                # Get results
+                if query_job.errors:
+                    error_msg = str(query_job.errors)
+                    st.error(f"BigQuery query error: {error_msg}")
+                    return None
+                
+                df = query_job.to_dataframe()
+                st.info(f"Query completed. Loaded {len(df):,} rows.")
+                
+            except TimeoutError as e:
+                st.error(f"Query timeout after {timeout_seconds} seconds.")
+                st.warning("The dataset is too large. Falling back to GCS with row limit...")
+                return None
+            except Exception as e:
+                error_msg = str(e)
+                st.error(f"BigQuery query failed: {error_msg}")
+                st.warning("Falling back to other data sources...")
+                return None
             
             # Optimize data types after loading
             if 'year' in df.columns:
@@ -570,12 +613,17 @@ def load_data_with_fallback():
             if 'gcp' in st.secrets:
                 gcp_config = st.secrets['gcp']
                 if 'bigquery_dataset' in gcp_config and 'bigquery_table' in gcp_config:
-                    st.info("Querying BigQuery for full dataset...")
-                    st.info("This will load all data efficiently without memory limits.")
+                    # Load recent data by default (last 2 years) to prevent timeout
+                    # This is much faster than loading all 4.48M rows
+                    default_filters = {'year': [2024, 2025]}  # Most recent years
                     
-                    # Query BigQuery without filters initially (load all data)
-                    # Filters will be applied in the dashboard UI
-                    bigquery_data = query_bigquery(filters=None)
+                    st.info("Querying BigQuery for recent data (2024-2025)...")
+                    st.info("This loads faster. Use sidebar filters to adjust the date range or view all data.")
+                    
+                    # Query BigQuery with default filters (recent years) to prevent timeout
+                    # Users can change filters in sidebar to get different data
+                    # Set limit to 2M rows as safety net
+                    bigquery_data = query_bigquery(filters=default_filters, limit_rows=2000000)
                     
                     if bigquery_data is not None and len(bigquery_data) > 0:
                         st.success(f"Loaded {len(bigquery_data):,} rows from BigQuery!")
@@ -584,7 +632,12 @@ def load_data_with_fallback():
                         st.warning("BigQuery query returned no data. Trying other sources...")
         except Exception as e:
             # Continue to other sources if BigQuery fails
-            st.warning(f"BigQuery query failed: {str(e)}. Trying other sources...")
+            import traceback
+            error_details = traceback.format_exc()
+            st.warning(f"BigQuery query failed: {str(e)}")
+            st.info("Falling back to GCS or local file...")
+            # Don't show full traceback to user, just log it
+            print(f"BigQuery error details: {error_details}", file=sys.stderr)
     
     # Priority 2: Try to load data (cached function - only checks local file)
     df = load_data()
