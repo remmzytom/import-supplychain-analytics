@@ -46,10 +46,13 @@ except ImportError:
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Import commodity mapping (with fallback)
+# Use broad exception handling to catch any import errors during health checks
+COMMODITY_MAPPING_AVAILABLE = False
 try:
     from commodity_code_mapping import map_commodity_code_to_sitc_industry
     COMMODITY_MAPPING_AVAILABLE = True
-except ImportError:
+except (ImportError, ModuleNotFoundError, AttributeError, Exception):
+    # Any error importing - use fallback
     COMMODITY_MAPPING_AVAILABLE = False
     # Fallback function if mapping is not available
     def map_commodity_code_to_sitc_industry(code):
