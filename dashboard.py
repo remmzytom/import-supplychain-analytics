@@ -364,12 +364,14 @@ def query_bigquery(filters=None):
                     years = ', '.join([str(y) for y in filters['year']])
                     where_conditions.append(f"year IN ({years})")
                 if 'month' in filters and filters['month']:
-                    # Escape single quotes in month names
-                    months = ', '.join([f"'{m.replace(\"'\", \"''\")}'" for m in filters['month']])
+                    # Escape single quotes in month names for SQL
+                    escaped_months = [m.replace("'", "''") for m in filters['month']]
+                    months = ', '.join([f"'{m}'" for m in escaped_months])
                     where_conditions.append(f"month IN ({months})")
                 if 'country' in filters and filters['country']:
-                    # Escape single quotes in country names
-                    countries = ', '.join([f"'{c.replace(\"'\", \"''\")}'" for c in filters['country']])
+                    # Escape single quotes in country names for SQL
+                    escaped_countries = [c.replace("'", "''") for c in filters['country']]
+                    countries = ', '.join([f"'{c}'" for c in escaped_countries])
                     where_conditions.append(f"country_description IN ({countries})")
             
             if where_conditions:
@@ -568,7 +570,7 @@ def load_data_with_fallback():
             if 'gcp' in st.secrets:
                 gcp_config = st.secrets['gcp']
                 if 'bigquery_dataset' in gcp_config and 'bigquery_table' in gcp_config:
-                    st.info("🔍 Querying BigQuery for full dataset...")
+                    st.info("Querying BigQuery for full dataset...")
                     st.info("This will load all data efficiently without memory limits.")
                     
                     # Query BigQuery without filters initially (load all data)
@@ -576,7 +578,7 @@ def load_data_with_fallback():
                     bigquery_data = query_bigquery(filters=None)
                     
                     if bigquery_data is not None and len(bigquery_data) > 0:
-                        st.success(f"✅ Loaded {len(bigquery_data):,} rows from BigQuery!")
+                        st.success(f"Loaded {len(bigquery_data):,} rows from BigQuery!")
                         return bigquery_data
                     else:
                         st.warning("BigQuery query returned no data. Trying other sources...")
