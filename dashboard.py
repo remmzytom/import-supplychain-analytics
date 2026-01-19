@@ -3,10 +3,12 @@ Streamlit Dashboard for Freight Import Data Analysis
 Interactive dashboard displaying all visualizations from the analysis notebook
 """
 
-# Page configuration MUST be first Streamlit command
+# Import streamlit first
 import streamlit as st
 
-# Wrap page config in try-except to handle cases where it's already set
+# Page configuration - MUST be first Streamlit command
+# Wrap in broad try-except to prevent health check failures
+# During health checks, Streamlit imports modules but may not fully initialize
 try:
     st.set_page_config(
         page_title="Freight Import Data Dashboard",
@@ -15,7 +17,9 @@ try:
         initial_sidebar_state="expanded"
     )
 except Exception:
-    # Page config already set or failed, continue anyway
+    # Page config failed - this can happen during health checks
+    # Streamlit will use defaults, app should still work
+    # Don't raise or print - just continue silently
     pass
 
 # Now import other modules
