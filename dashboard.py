@@ -26,12 +26,15 @@ except ImportError:
 # Add current directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Import commodity mapping
+# Import commodity mapping (with fallback)
 try:
     from commodity_code_mapping import map_commodity_code_to_sitc_industry
+    COMMODITY_MAPPING_AVAILABLE = True
 except ImportError:
-    st.error("Could not import commodity_code_mapping. Please ensure commodity_code_mapping.py is in the same directory.")
-    st.stop()
+    COMMODITY_MAPPING_AVAILABLE = False
+    # Fallback function if mapping is not available
+    def map_commodity_code_to_sitc_industry(code):
+        return "Unknown"
 
 warnings.filterwarnings('ignore')
 
@@ -256,7 +259,10 @@ def load_data_from_file(file_path):
         
         # Add industry sector if not present
         if 'industry_sector' not in df.columns:
-            df['industry_sector'] = df['commodity_code'].apply(map_commodity_code_to_sitc_industry)
+            if COMMODITY_MAPPING_AVAILABLE:
+                df['industry_sector'] = df['commodity_code'].apply(map_commodity_code_to_sitc_industry)
+            else:
+                df['industry_sector'] = "Unknown"
         
         # Create date column for time series
         df['date'] = pd.to_datetime(
@@ -304,7 +310,7 @@ def load_data_with_fallback():
     df = load_data()
     
     # If data loaded successfully, return it
-    if df is not None:
+    if df is not None and len(df) > 0:
         return df
     
     # If data not found, show error and offer file uploader
@@ -314,19 +320,23 @@ def load_data_with_fallback():
     - Ensure `data/imports_2024_2025_cleaned.csv` exists in your project directory
     
     **For Streamlit Cloud:**
-    - Configure Google Cloud Storage in Streamlit secrets (see GCS_SETUP_GUIDE.md)
+    - Configure Google Cloud Storage in Streamlit secrets
     - Or upload the data file using the file uploader below
     """)
     
     # Offer file uploader as fallback (this is outside cached function)
     uploaded_file = st.file_uploader("Upload cleaned data file (CSV)", type=['csv'])
     if uploaded_file is not None:
-        with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            tmp_path = tmp_file.name
-        return load_data_from_file(tmp_path)
+        try:
+            with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
+                tmp_file.write(uploaded_file.getvalue())
+                tmp_path = tmp_file.name
+            return load_data_from_file(tmp_path)
+        except Exception as e:
+            st.error(f"Error loading uploaded file: {str(e)}")
+            return None
     
-    st.stop()
+    return None
 
 def main():
     """Main dashboard application"""
@@ -337,6 +347,11 @@ def main():
     
     # Load data
     df = load_data_with_fallback()
+    
+    # Check if data was loaded successfully
+    if df is None or len(df) == 0:
+        st.warning("No data available. Please configure data source or upload a file.")
+        return
     
     # Sidebar filters
     st.sidebar.header("Filters")
@@ -975,7 +990,10 @@ def show_value_volume_analysis(df):
     st.markdown('<h2 class="section-header">Value vs Volume Analysis</h2>', unsafe_allow_html=True)
     
     if 'industry_sector' not in df.columns:
-        df['industry_sector'] = df['commodity_code'].apply(map_commodity_code_to_sitc_industry)
+        if COMMODITY_MAPPING_AVAILABLE:
+            df['industry_sector'] = df['commodity_code'].apply(map_commodity_code_to_sitc_industry)
+        else:
+            df['industry_sector'] = "Unknown"
     
     # Industry-level analysis
     industry_analysis = df.groupby('industry_sector').agg({
