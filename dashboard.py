@@ -42,5 +42,12 @@ except Exception as e:
     st.warning(f"⚠ commodity_code_mapping not available: {e}")
 
 st.info("This is a minimal test. If this works, we can debug the main dashboard.")
-st.write(f"**Deployment Test:** This dashboard was updated at {pd.Timestamp.now()}")
+
+# Show timestamp if pandas is available
+try:
+    import pandas as pd
+    st.write(f"**Deployment Test:** This dashboard was updated at {pd.Timestamp.now()}")
+except:
+    from datetime import datetime
+    st.write(f"**Deployment Test:** This dashboard was updated at {datetime.now()}")
 
