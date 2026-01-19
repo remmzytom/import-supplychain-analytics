@@ -104,18 +104,24 @@ def _load_data_from_gcs_internal(show_progress=False):
     try:
         # Safely check for secrets (may not be available in all contexts)
         try:
-            has_secrets = 'gcp' in st.secrets
-        except (AttributeError, RuntimeError, Exception):
-            # Secrets not available or not configured
+            # Check if secrets are available at all
+            if not hasattr(st, 'secrets'):
+                if show_progress:
+                    st.warning("Streamlit secrets not available. Skipping GCS load.")
+                return None
+            
+            # Check if gcp key exists
+            if 'gcp' not in st.secrets:
+                if show_progress:
+                    st.warning("GCP configuration not found in Streamlit secrets. Skipping GCS load.")
+                return None
+        except Exception as e:
+            # Any error accessing secrets - fail gracefully
             if show_progress:
-                st.warning("GCP configuration not available. Skipping GCS load.")
+                st.warning(f"Could not access Streamlit secrets: {str(e)}. Skipping GCS load.")
             return None
         
         # Get GCS configuration from Streamlit secrets
-        if not has_secrets:
-            if show_progress:
-                st.error("GCP configuration not found in Streamlit secrets. Please configure GCS access.")
-            return None
         
         gcp_config = st.secrets['gcp']
         bucket_name = gcp_config.get('bucket_name', 'freight-import-data')
@@ -359,11 +365,24 @@ def main():
     """Main dashboard application"""
     
     # Header
-    st.markdown('<h1 class="main-header">Freight Import Data Dashboard</h1>', unsafe_allow_html=True)
-    st.markdown("---")
+    try:
+        st.markdown('<h1 class="main-header">Freight Import Data Dashboard</h1>', unsafe_allow_html=True)
+        st.markdown("---")
+    except Exception as e:
+        st.error(f"Error displaying header: {str(e)}")
+        return
     
-    # Load data
-    df = load_data_with_fallback()
+    # Load data with error handling
+    try:
+        df = load_data_with_fallback()
+    except Exception as e:
+        st.error("**Error loading data**")
+        st.error(f"Error: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
+        st.info("Please check your data source configuration or try uploading a file.")
+        return
     
     # Check if data was loaded successfully
     if df is None or len(df) == 0:
@@ -1489,22 +1508,31 @@ def show_key_insights(df):
 if __name__ == "__main__":
     try:
         main()
+    except KeyboardInterrupt:
+        st.info("Dashboard stopped by user.")
     except Exception as e:
+        # Catch ALL errors and display them
+        import traceback
+        error_trace = traceback.format_exc()
+        
         st.error("**Dashboard Error**")
         st.error(f"An error occurred: {str(e)}")
         st.error(f"Error type: {type(e).__name__}")
-        import traceback
+        
         with st.expander("Show detailed error information"):
-            st.code(traceback.format_exc())
+            st.code(error_trace)
+        
         st.info("""
         **Common issues:**
         1. Missing data file - Check GCS configuration in Streamlit secrets
-        2. Missing dependencies - Check requirements.txt
+        2. Missing dependencies - Check requirements.txt  
         3. Data format issues - Verify CSV file structure
+        4. Secrets configuration - Verify Streamlit secrets are set correctly
         
         **To fix:**
         - Check Streamlit Cloud logs for more details
         - Verify all secrets are configured correctly
         - Ensure data file exists in GCS bucket
+        - Try uploading a file using the file uploader
         """)
 
