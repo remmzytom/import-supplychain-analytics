@@ -208,12 +208,29 @@ def _load_data_from_gcs_internal(show_progress=False):
                 st.success("File downloaded successfully!")
             
             # Load data from temporary file
+            # For Streamlit Cloud, limit to 2M rows to prevent memory issues
+            # Users can filter further in the dashboard
+            MAX_ROWS_FOR_STREAMLIT_CLOUD = 2000000  # 2M rows max
+            
             if show_progress:
                 st.info("Loading data into memory...")
-            df = load_data_from_file(tmp_path)
+                st.warning(f"⚠️ Large dataset detected. Loading up to {MAX_ROWS_FOR_STREAMLIT_CLOUD:,} rows to prevent memory issues.")
+                st.info("💡 Tip: Use filters in the sidebar to focus on specific data after loading.")
+            
+            df = load_data_from_file(tmp_path, max_rows=MAX_ROWS_FOR_STREAMLIT_CLOUD)
+            
+            if df is None:
+                # Error already displayed in load_data_from_file
+                return None
             
             if show_progress:
                 st.success(f"Data loaded successfully! ({len(df):,} rows)")
+                # Show memory usage
+                try:
+                    memory_mb = df.memory_usage(deep=True).sum() / (1024**2)
+                    st.info(f"Memory usage: {memory_mb:.2f} MB")
+                except:
+                    pass
             
             return df
         finally:
@@ -264,18 +281,62 @@ def load_data_from_gcs():
     """Load data from Google Cloud Storage (with progress indicators)"""
     return _load_data_from_gcs_internal(show_progress=True)
 
-def load_data_from_file(file_path):
-    """Load and process data from a CSV file"""
+def load_data_from_file(file_path, max_rows=None):
+    """Load and process data from a CSV file with memory optimization
+    
+    Args:
+        file_path: Path to CSV file
+        max_rows: Maximum number of rows to load (None = load all, use for large datasets)
+    """
     chunk_size = 100000
     chunks = []
     total_rows = 0
     batch_size = 5
     
     try:
-        for i, chunk in enumerate(pd.read_csv(file_path, chunksize=chunk_size), 1):
+        # Load data in chunks
+        chunks_to_load = None
+        if max_rows:
+            # Calculate how many chunks we need
+            chunks_to_load = (max_rows // chunk_size) + 1
+        
+        for i, chunk in enumerate(pd.read_csv(file_path, chunksize=chunk_size, low_memory=False), 1):
+            # Check if we've reached the max_rows limit
+            if max_rows and total_rows >= max_rows:
+                break
+            
+            # Stop if we've loaded enough chunks (approximate limit)
+            if chunks_to_load and i > chunks_to_load:
+                # Take only what we need from this chunk
+                if max_rows:
+                    remaining = max_rows - total_rows
+                    if remaining > 0:
+                        chunk = chunk.head(remaining)
+                    else:
+                        break
+                else:
+                    break
+            
+            # Optimize data types immediately to reduce memory
+            if 'year' in chunk.columns:
+                chunk['year'] = pd.to_numeric(chunk['year'], downcast='integer')
+            if 'month_number' in chunk.columns:
+                chunk['month_number'] = pd.to_numeric(chunk['month_number'], downcast='integer')
+            
+            # Optimize float columns
+            float_cols = ['valuecif', 'valuefob', 'weight', 'quantity']
+            for col in float_cols:
+                if col in chunk.columns:
+                    chunk[col] = pd.to_numeric(chunk[col], downcast='float')
+            
             chunks.append(chunk)
             total_rows += len(chunk)
             
+            # If we've reached max_rows, stop
+            if max_rows and total_rows >= max_rows:
+                break
+            
+            # Combine chunks periodically to avoid memory spikes
             if len(chunks) >= batch_size:
                 if 'df' not in locals():
                     df = pd.concat(chunks, ignore_index=True)
@@ -292,24 +353,52 @@ def load_data_from_file(file_path):
             else:
                 df = pd.concat([df] + chunks, ignore_index=True)
         
-        # Add industry sector if not present
+        # Final memory optimization
+        import gc
+        gc.collect()
+        
+        # Add industry sector if not present (do this efficiently)
         if 'industry_sector' not in df.columns:
             if COMMODITY_MAPPING_AVAILABLE:
+                # Process in batches to avoid memory spike
                 df['industry_sector'] = df['commodity_code'].apply(map_commodity_code_to_sitc_industry)
             else:
                 df['industry_sector'] = "Unknown"
         
         # Create date column for time series
-        df['date'] = pd.to_datetime(
-            df['year'].astype(str) + '-' + 
-            df['month_number'].astype(str).str.zfill(2) + '-01'
-        )
+        if 'year' in df.columns and 'month_number' in df.columns:
+            df['date'] = pd.to_datetime(
+                df['year'].astype(str) + '-' + 
+                df['month_number'].astype(str).str.zfill(2) + '-01'
+            )
         
         return df
     
+    except MemoryError as e:
+        import traceback
+        st.error("**Memory Error: Dataset too large for Streamlit Cloud**")
+        st.error(f"Error: {str(e)}")
+        st.warning("""
+        **The dataset (4.48M rows) is too large to load entirely into memory on Streamlit Cloud.**
+        
+        **Options:**
+        1. **Use BigQuery** (recommended) - Query data instead of loading entire file
+        2. **Sample the data** - Load a subset for dashboard
+        3. **Filter before loading** - Load only specific years/months
+        
+        **Current status:** Trying to load full dataset...
+        """)
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
+        return None
     except Exception as e:
-        st.error(f"Error loading data from file: {str(e)}")
-        st.stop()
+        import traceback
+        st.error(f"**Error loading data from file**")
+        st.error(f"Error: {str(e)}")
+        st.error(f"Error type: {type(e).__name__}")
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
+        return None
 
 @st.cache_data
 def load_data():
