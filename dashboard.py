@@ -3,7 +3,16 @@ Streamlit Dashboard for Freight Import Data Analysis
 Interactive dashboard displaying all visualizations from the analysis notebook
 """
 
+# Page configuration MUST be first Streamlit command
 import streamlit as st
+st.set_page_config(
+    page_title="Freight Import Data Dashboard",
+    page_icon=None,
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Now import other modules
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -37,14 +46,6 @@ except ImportError:
         return "Unknown"
 
 warnings.filterwarnings('ignore')
-
-# Page configuration
-st.set_page_config(
-    page_title="Freight Import Data Dashboard",
-    page_icon=None,
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # Custom CSS
 st.markdown("""
@@ -1470,5 +1471,24 @@ def show_key_insights(df):
         st.metric("Top 10 Commodities Share", f"{top_10_commodities_pct:.2f}%")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        st.error("**Dashboard Error**")
+        st.error(f"An error occurred: {str(e)}")
+        st.error(f"Error type: {type(e).__name__}")
+        import traceback
+        with st.expander("Show detailed error information"):
+            st.code(traceback.format_exc())
+        st.info("""
+        **Common issues:**
+        1. Missing data file - Check GCS configuration in Streamlit secrets
+        2. Missing dependencies - Check requirements.txt
+        3. Data format issues - Verify CSV file structure
+        
+        **To fix:**
+        - Check Streamlit Cloud logs for more details
+        - Verify all secrets are configured correctly
+        - Ensure data file exists in GCS bucket
+        """)
 
