@@ -5,12 +5,18 @@ Interactive dashboard displaying all visualizations from the analysis notebook
 
 # Page configuration MUST be first Streamlit command
 import streamlit as st
-st.set_page_config(
-    page_title="Freight Import Data Dashboard",
-    page_icon=None,
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+
+# Wrap page config in try-except to handle cases where it's already set
+try:
+    st.set_page_config(
+        page_title="Freight Import Data Dashboard",
+        page_icon=None,
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+except Exception:
+    # Page config already set or failed, continue anyway
+    pass
 
 # Now import other modules
 import pandas as pd
@@ -47,55 +53,61 @@ except ImportError:
 
 warnings.filterwarnings('ignore')
 
-# Custom CSS
-st.markdown("""
-    <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        text-align: center;
-        padding: 1rem 0;
-    }
-    .section-header {
-        font-size: 1.8rem;
-        font-weight: bold;
-        color: #2c3e50;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-        border-bottom: 3px solid #1f77b4;
-        padding-bottom: 0.5rem;
-    }
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #1f77b4;
-    }
-    .nav-button {
-        background-color: #1f77b4;
-        color: white;
-        padding: 0.5rem 1.5rem;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 1rem;
-        margin: 0.5rem;
-    }
-    .nav-button:hover {
-        background-color: #155a8a;
-    }
-    .nav-container {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 1rem;
-        background-color: #f8f9fa;
-        border-radius: 10px;
-        margin: 1rem 0;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# Custom CSS - moved to function to avoid module-level execution issues
+def apply_custom_css():
+    """Apply custom CSS styles"""
+    try:
+        st.markdown("""
+            <style>
+            .main-header {
+                font-size: 2.5rem;
+                font-weight: bold;
+                color: #1f77b4;
+                text-align: center;
+                padding: 1rem 0;
+            }
+            .section-header {
+                font-size: 1.8rem;
+                font-weight: bold;
+                color: #2c3e50;
+                margin-top: 2rem;
+                margin-bottom: 1rem;
+                border-bottom: 3px solid #1f77b4;
+                padding-bottom: 0.5rem;
+            }
+            .metric-card {
+                background-color: #f0f2f6;
+                padding: 1rem;
+                border-radius: 0.5rem;
+                border-left: 4px solid #1f77b4;
+            }
+            .nav-button {
+                background-color: #1f77b4;
+                color: white;
+                padding: 0.5rem 1.5rem;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 1rem;
+                margin: 0.5rem;
+            }
+            .nav-button:hover {
+                background-color: #155a8a;
+            }
+            .nav-container {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 1rem;
+                background-color: #f8f9fa;
+                border-radius: 10px;
+                margin: 1rem 0;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+    except Exception:
+        # CSS failed to load, continue without it
+        pass
 
 def _load_data_from_gcs_internal(show_progress=False):
     """Internal function to load data from GCS without Streamlit widgets
@@ -363,6 +375,9 @@ def load_data_with_fallback():
 
 def main():
     """Main dashboard application"""
+    
+    # Apply custom CSS
+    apply_custom_css()
     
     # Header
     try:
