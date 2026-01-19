@@ -102,8 +102,17 @@ def _load_data_from_gcs_internal(show_progress=False):
     This can be called from cached functions
     """
     try:
+        # Safely check for secrets (may not be available in all contexts)
+        try:
+            has_secrets = 'gcp' in st.secrets
+        except (AttributeError, RuntimeError, Exception):
+            # Secrets not available or not configured
+            if show_progress:
+                st.warning("GCP configuration not available. Skipping GCS load.")
+            return None
+        
         # Get GCS configuration from Streamlit secrets
-        if 'gcp' not in st.secrets:
+        if not has_secrets:
             if show_progress:
                 st.error("GCP configuration not found in Streamlit secrets. Please configure GCS access.")
             return None
@@ -280,39 +289,46 @@ def load_data_from_file(file_path):
 @st.cache_data
 def load_data():
     """Load and cache the cleaned import data
-    Tries local file first, then Google Cloud Storage if available
+    Tries local file first
     NOTE: This function cannot contain widget commands (like st.file_uploader)
+    NOTE: Cannot access st.secrets in cached functions - GCS loading handled in load_data_with_fallback()
     """
     # Try local file first (for local development)
     data_path = 'data/imports_2024_2025_cleaned.csv'
     
     if os.path.exists(data_path):
-        return load_data_from_file(data_path)
-    
-    # If local file not found, try Google Cloud Storage
-    if GCS_AVAILABLE:
         try:
-            # Use internal function without widgets for cached context
-            gcs_data = _load_data_from_gcs_internal(show_progress=False)
-            if gcs_data is not None:
-                return gcs_data
-        except Exception as e:
-            # Don't show widgets here - return None and let main() handle it
+            return load_data_from_file(data_path)
+        except Exception:
+            # Silently fail - let non-cached function handle GCS
             return None
     
-    # If both fail, return None (main() will handle the error and file uploader)
+    # Cannot access st.secrets in cached function - return None
+    # The non-cached load_data_with_fallback() will handle GCS loading
     return None
 
 def load_data_with_fallback():
     """Load data with fallback to file uploader
     This function handles widgets and should not be cached
+    Can access st.secrets here since it's not cached
     """
-    # Try to load data (cached function)
+    # Try to load data (cached function - only checks local file)
     df = load_data()
     
     # If data loaded successfully, return it
     if df is not None and len(df) > 0:
         return df
+    
+    # If local file not found, try GCS directly (can use st.secrets here)
+    if GCS_AVAILABLE:
+        try:
+            # Can access secrets here since this function is not cached
+            gcs_data = _load_data_from_gcs_internal(show_progress=True)
+            if gcs_data is not None and len(gcs_data) > 0:
+                return gcs_data
+        except Exception as e:
+            # Continue to file uploader fallback
+            pass
     
     # If data not found, show error and offer file uploader
     st.error("**Data file not found**")
