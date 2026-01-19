@@ -1,114 +1,51 @@
 """
 Streamlit Dashboard for Freight Import Data Analysis
 Interactive dashboard displaying all visualizations from the analysis notebook
-Updated: 2025-01-10
 """
 
-# Wrap all imports in try-except to prevent silent crashes
-try:
-    import streamlit as st
-    import pandas as pd
-    import numpy as np
-    import plotly.express as px
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-    import warnings
-    from datetime import datetime
-    import sys
-    import os
-    import tempfile
-    import json
-    
-    # Try to import Google Cloud Storage (optional - for Streamlit Cloud)
-    try:
-        from google.cloud import storage
-        GCS_AVAILABLE = True
-    except ImportError:
-        GCS_AVAILABLE = False
-    
-    # Try to import BigQuery (for efficient querying)
-    try:
-        from google.cloud import bigquery
-        BIGQUERY_AVAILABLE = True
-    except ImportError:
-        BIGQUERY_AVAILABLE = False
-    
-    # Add current directory to path for imports
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    
-    # Import commodity mapping (optional - provide fallback)
-    try:
-        from commodity_code_mapping import map_commodity_code_to_sitc_industry
-        COMMODITY_MAPPING_AVAILABLE = True
-    except ImportError:
-        COMMODITY_MAPPING_AVAILABLE = False
-        # Fallback function if mapping is not available
-        def map_commodity_code_to_sitc_industry(code):
-            return "Unknown"
-    
-    warnings.filterwarnings('ignore')
-except Exception as e:
-    # If imports fail, we can't use st.error, so print to stderr
-    import sys
-    print(f"CRITICAL: Import failed: {e}", file=sys.stderr)
-    import traceback
-    traceback.print_exc(file=sys.stderr)
-    # Try to import streamlit at least to show error
-    try:
-        import streamlit as st
-        st.error(f"Failed to import required modules: {e}")
-        st.stop()
-    except:
-        raise
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import warnings
+from datetime import datetime
+import sys
+import os
+import tempfile
+import json
 
-# Light Theme Function for Plotly Charts
-def apply_light_theme(fig):
-    """Apply light theme to Plotly charts"""
-    fig.update_layout(
-        template='plotly_white',
-        plot_bgcolor='#ffffff',
-        paper_bgcolor='#ffffff',
-        font=dict(color='#262730'),
-        title=dict(font=dict(color='#262730')),
-        xaxis=dict(gridcolor='#e0e0e0', linecolor='#b0b0b0'),
-        yaxis=dict(gridcolor='#e0e0e0', linecolor='#b0b0b0'),
-    )
-    return fig
-
-# Page configuration (wrap in try-except to prevent crashes)
+# Try to import Google Cloud Storage (optional - for Streamlit Cloud)
 try:
-    st.set_page_config(
-        page_title="Freight Import Data Dashboard",
-        page_icon=None,
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-except Exception:
-    # Page config already set, ignore
-    pass
+    from google.cloud import storage
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
 
-# Custom CSS (wrap in try-except to prevent crashes)
+# Add current directory to path for imports
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Import commodity mapping
 try:
-    st.markdown("""
+    from commodity_code_mapping import map_commodity_code_to_sitc_industry
+except ImportError:
+    st.error("Could not import commodity_code_mapping. Please ensure commodity_code_mapping.py is in the same directory.")
+    st.stop()
+
+warnings.filterwarnings('ignore')
+
+# Page configuration
+st.set_page_config(
+    page_title="Freight Import Data Dashboard",
+    page_icon=None,
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS
+st.markdown("""
     <style>
-    /* Light Background */
-    .main {
-        background-color: #ffffff;
-    }
-    .stApp {
-        background-color: #ffffff;
-    }
-    .block-container {
-        background-color: #ffffff;
-    }
-    body {
-        background-color: #ffffff !important;
-    }
-    html {
-        background-color: #ffffff !important;
-    }
-    
-    /* Main Header */
     .main-header {
         font-size: 2.5rem;
         font-weight: bold;
@@ -116,8 +53,6 @@ try:
         text-align: center;
         padding: 1rem 0;
     }
-    
-    /* Section Headers */
     .section-header {
         font-size: 1.8rem;
         font-weight: bold;
@@ -127,80 +62,12 @@ try:
         border-bottom: 3px solid #1f77b4;
         padding-bottom: 0.5rem;
     }
-    
-    /* Text Colors */
-    p, span, div, label, h1, h2, h3, h4, h5, h6 {
-        color: #262730 !important;
-    }
-    .stMarkdown {
-        color: #262730;
-    }
-    
-    /* Metric Cards */
     .metric-card {
-        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-        padding: 1.5rem;
-        border-radius: 12px;
-        border: 1px solid rgba(31, 119, 180, 0.3);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        transition: all 0.3s ease;
-        margin-bottom: 1rem;
-        width: 100%;
-        height: 140px;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        box-sizing: border-box;
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border-left: 4px solid #1f77b4;
     }
-    .metric-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-        border-color: rgba(31, 119, 180, 0.5);
-    }
-    .metric-card-title {
-        font-size: 0.9rem;
-        font-weight: 600;
-        color: #6c757d;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 0.5rem;
-        line-height: 1.2;
-    }
-    .metric-card-value {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #1f77b4;
-        margin: 0;
-        line-height: 1.2;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-    }
-    div[data-testid="stMetricContainer"] {
-        background: linear-gradient(135deg, #1e2130 0%, #2d3748 100%) !important;
-        padding: 1.5rem !important;
-        border-radius: 12px !important;
-        border: 1px solid rgba(31, 119, 180, 0.3) !important;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3) !important;
-    }
-    div[data-testid="stMetricContainer"]:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4) !important;
-        border-color: rgba(31, 119, 180, 0.5) !important;
-    }
-    [data-testid="stMetricValue"] {
-        font-size: 2rem !important;
-        font-weight: 700 !important;
-        color: #ffffff !important;
-    }
-    [data-testid="stMetricLabel"] {
-        font-size: 0.9rem !important;
-        font-weight: 600 !important;
-        color: #a0aec0 !important;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-    
-    /* Navigation Button */
     .nav-button {
         background-color: #1f77b4;
         color: white;
@@ -214,8 +81,6 @@ try:
     .nav-button:hover {
         background-color: #155a8a;
     }
-    
-    /* Navigation Container */
     .nav-container {
         display: flex;
         justify-content: space-between;
@@ -225,65 +90,8 @@ try:
         border-radius: 10px;
         margin: 1rem 0;
     }
-    
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #ffffff;
-    }
-    [data-testid="stSidebar"] .stMarkdown {
-        color: #262730;
-    }
-    [data-testid="stSidebar"] label {
-        color: #262730 !important;
-    }
-    
-    /* Info/Error/Success/Warning Boxes */
-    .stInfo {
-        background-color: #e7f3ff;
-        border-left: 4px solid #1f77b4;
-        color: #262730;
-    }
-    .stError {
-        background-color: #ffe7e7;
-        border-left: 4px solid #e53e3e;
-        color: #262730;
-    }
-    .stSuccess {
-        background-color: #e7f5e7;
-        border-left: 4px solid #38a169;
-        color: #262730;
-    }
-    .stWarning {
-        background-color: #fff4e7;
-        border-left: 4px solid #d69e2e;
-        color: #262730;
-    }
-    
-    /* Selectbox and Input Fields */
-    [data-baseweb="select"] {
-        background-color: #ffffff;
-        color: #262730;
-    }
-    input, textarea, select {
-        background-color: #ffffff !important;
-        color: #262730 !important;
-    }
-    
-    /* Dataframe */
-    .dataframe {
-        background-color: #ffffff;
-        color: #262730;
-    }
-    
-    /* Horizontal Rule */
-    hr {
-        border-color: #e0e0e0;
-    }
     </style>
 """, unsafe_allow_html=True)
-except Exception:
-    # CSS failed to load, continue without it
-    pass
 
 def _load_data_from_gcs_internal(show_progress=False):
     """Internal function to load data from GCS without Streamlit widgets
@@ -418,138 +226,8 @@ def load_data_from_gcs():
     """Load data from Google Cloud Storage (with progress indicators)"""
     return _load_data_from_gcs_internal(show_progress=True)
 
-def query_bigquery(limit_rows=None, filters=None):
-    """Query data from BigQuery instead of downloading entire CSV
-    This is much more memory-efficient for large datasets
-    
-    Args:
-        limit_rows: Maximum number of rows to return (None = no limit, but use wisely!)
-        filters: Dict of filters like {'year': [2024, 2025], 'month': ['January', 'February']}
-    
-    Returns:
-        pandas.DataFrame or None
-    """
-    import sys
-    
-    if not BIGQUERY_AVAILABLE:
-        print("BigQuery not available", file=sys.stderr)
-        return None
-    
-    try:
-        print("Querying BigQuery...", file=sys.stderr)
-        
-        # Get BigQuery configuration from Streamlit secrets
-        if 'gcp' not in st.secrets:
-            print("GCP configuration not found in Streamlit secrets", file=sys.stderr)
-            return None
-        
-        gcp_config = st.secrets['gcp']
-        dataset_id = gcp_config.get('bigquery_dataset', 'freight_import_data')
-        table_id = gcp_config.get('bigquery_table', 'imports_cleaned')
-        project_id = gcp_config.get('bigquery_project', '')
-        
-        print(f"BigQuery config - Dataset: {dataset_id}, Table: {table_id}, Project: {project_id}", file=sys.stderr)
-        
-        # Get credentials from secrets
-        if 'credentials' not in gcp_config:
-            print("GCP credentials not found in Streamlit secrets", file=sys.stderr)
-            return None
-        
-        # Create credentials dict from secrets
-        credentials_dict = dict(gcp_config['credentials'])
-        
-        # Create temporary file for credentials
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as creds_file:
-            json.dump(credentials_dict, creds_file)
-            creds_path = creds_file.name
-        
-        try:
-            # Initialize BigQuery client
-            client = bigquery.Client.from_service_account_json(creds_path)
-            
-            # Get project ID from credentials if not set
-            if not project_id:
-                import json
-                with open(creds_path, 'r') as f:
-                    creds_data = json.load(f)
-                    project_id = creds_data.get('project_id')
-                    if project_id:
-                        client.project = project_id
-                        print(f"Using project ID from credentials: {project_id}", file=sys.stderr)
-            
-            if not project_id:
-                print("ERROR: BigQuery project ID not found", file=sys.stderr)
-                return None
-            
-            # Build query
-            table_ref = f"{project_id}.{dataset_id}.{table_id}"
-            
-            # Start with base query
-            query = f"SELECT * FROM `{table_ref}`"
-            
-            # Add filters if provided
-            where_conditions = []
-            if filters:
-                if 'year' in filters and filters['year']:
-                    years = ', '.join(map(str, filters['year']))
-                    where_conditions.append(f"year IN ({years})")
-                if 'month' in filters and filters['month']:
-                    months = ', '.join([f"'{m}'" for m in filters['month']])
-                    where_conditions.append(f"month IN ({months})")
-                if 'country' in filters and filters['country']:
-                    # Escape single quotes in country names for SQL
-                    escaped_countries = [c.replace("'", "''") for c in filters['country']]
-                    countries = ', '.join([f"'{c}'" for c in escaped_countries])
-                    where_conditions.append(f"country_description IN ({countries})")
-            
-            if where_conditions:
-                query += " WHERE " + " AND ".join(where_conditions)
-            
-            # Add limit if specified (recommended for large datasets)
-            if limit_rows:
-                query += f" LIMIT {limit_rows}"
-            else:
-                # Default limit to prevent memory issues
-                query += " LIMIT 2000000"  # 2M rows max by default
-                print("Using default limit of 2M rows to prevent memory issues", file=sys.stderr)
-            
-            print(f"Executing query: {query[:200]}...", file=sys.stderr)
-            
-            # Execute query
-            query_job = client.query(query)
-            df = query_job.to_dataframe()
-            
-            print(f"Query returned {len(df):,} rows", file=sys.stderr)
-            
-            # Optimize data types
-            if 'year' in df.columns:
-                df['year'] = df['year'].astype('int16')
-            if 'month_number' in df.columns:
-                df['month_number'] = df['month_number'].astype('int8')
-            
-            # Create date column if needed
-            if 'date' not in df.columns and 'year' in df.columns and 'month_number' in df.columns:
-                df['date'] = pd.to_datetime(
-                    df['year'].astype(str) + '-' + 
-                    df['month_number'].astype(str).str.zfill(2) + '-01'
-                )
-            
-            return df
-            
-        finally:
-            # Clean up credentials file
-            if os.path.exists(creds_path):
-                os.unlink(creds_path)
-                
-    except Exception as e:
-        print(f"ERROR querying BigQuery: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        return None
-
 def load_data_from_file(file_path):
     """Load and process data from a CSV file"""
-    import sys
     chunk_size = 100000
     chunks = []
     total_rows = 0
@@ -580,25 +258,6 @@ def load_data_from_file(file_path):
         if 'industry_sector' not in df.columns:
             df['industry_sector'] = df['commodity_code'].apply(map_commodity_code_to_sitc_industry)
         
-        # Optimize data types to reduce memory usage
-        print("Optimizing data types to reduce memory...", file=sys.stderr)
-        try:
-            # Convert numeric columns to appropriate types
-            if 'year' in df.columns:
-                df['year'] = df['year'].astype('int16')  # Years fit in int16
-            if 'month_number' in df.columns:
-                df['month_number'] = df['month_number'].astype('int8')  # Months fit in int8
-            
-            # Convert float columns to float32 if precision allows
-            float_cols = ['valuecif', 'valuefob', 'weight']
-            for col in float_cols:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], downcast='float')
-            
-            print(f"Memory after optimization: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB", file=sys.stderr)
-        except Exception as e:
-            print(f"Warning: Could not optimize data types: {e}", file=sys.stderr)
-        
         # Create date column for time series
         df['date'] = pd.to_datetime(
             df['year'].astype(str) + '-' + 
@@ -609,116 +268,46 @@ def load_data_from_file(file_path):
     
     except Exception as e:
         st.error(f"Error loading data from file: {str(e)}")
-        import traceback
-        st.code(traceback.format_exc())
-        return None
+        st.stop()
 
 @st.cache_data
 def load_data():
     """Load and cache the cleaned import data
     Tries local file first, then Google Cloud Storage if available
     NOTE: This function cannot contain widget commands (like st.file_uploader)
-    NOTE: Cannot access st.secrets directly in cached functions - must pass as parameter
     """
-    import sys
-    print("load_data() called", file=sys.stderr)
-    
     # Try local file first (for local development)
     data_path = 'data/imports_2024_2025_cleaned.csv'
-    print(f"Checking for local file: {data_path}", file=sys.stderr)
     
-    try:
-        if os.path.exists(data_path):
-            print(f"Local file found, loading...", file=sys.stderr)
-            return load_data_from_file(data_path)
-        else:
-            print(f"Local file not found", file=sys.stderr)
-    except Exception as e:
-        print(f"ERROR loading local file: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        # Silently fail and try GCS
-        pass
+    if os.path.exists(data_path):
+        return load_data_from_file(data_path)
     
     # If local file not found, try Google Cloud Storage
-    # NOTE: Cannot access st.secrets in cached function - return None and let non-cached function handle it
-    print(f"GCS_AVAILABLE: {GCS_AVAILABLE}", file=sys.stderr)
-    print("Cannot access st.secrets in cached function - returning None", file=sys.stderr)
+    if GCS_AVAILABLE:
+        try:
+            # Use internal function without widgets for cached context
+            gcs_data = _load_data_from_gcs_internal(show_progress=False)
+            if gcs_data is not None:
+                return gcs_data
+        except Exception as e:
+            # Don't show widgets here - return None and let main() handle it
+            return None
     
     # If both fail, return None (main() will handle the error and file uploader)
     return None
 
 def load_data_with_fallback():
     """Load data with fallback to file uploader
-    Priority: BigQuery > Local file > GCS > File uploader
     This function handles widgets and should not be cached
-    Can access st.secrets here since it's not cached
     """
-    import sys
-    print("load_data_with_fallback() called", file=sys.stderr)
+    # Try to load data (cached function)
+    df = load_data()
     
-    # Priority 1: Try BigQuery first (most efficient for large datasets)
-    print("Attempting to load from BigQuery...", file=sys.stderr)
-    if BIGQUERY_AVAILABLE:
-        try:
-            print("Checking for BigQuery configuration...", file=sys.stderr)
-            if 'gcp' in st.secrets:
-                print("GCP secrets found, querying BigQuery...", file=sys.stderr)
-                # Query BigQuery with reasonable limit to prevent memory issues
-                # We'll filter further in the dashboard
-                bigquery_data = query_bigquery(limit_rows=2000000)  # 2M rows max
-                print(f"BigQuery query returned: {bigquery_data is not None}, length={len(bigquery_data) if bigquery_data is not None else 0}", file=sys.stderr)
-                if bigquery_data is not None and len(bigquery_data) > 0:
-                    print(f"BigQuery data loaded successfully, length: {len(bigquery_data)}", file=sys.stderr)
-                    return bigquery_data
-            else:
-                print("GCP secrets not found for BigQuery", file=sys.stderr)
-        except Exception as e:
-            print(f"ERROR loading from BigQuery: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            # Continue to try other sources
-    
-    # Priority 2: Try to load data (cached function - only checks local file)
-    try:
-        print("Calling load_data()...", file=sys.stderr)
-        df = load_data()
-        print(f"load_data() returned: {df is not None}, length={len(df) if df is not None else 0}", file=sys.stderr)
-        
-        # If data loaded successfully, return it
-        if df is not None and len(df) > 0:
-            print("Data loaded successfully from local file, returning dataframe", file=sys.stderr)
-            return df
-        else:
-            print("Data is None or empty from load_data()", file=sys.stderr)
-    except Exception as e:
-        print(f"ERROR in load_data(): {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        st.warning(f"Error loading data: {str(e)}")
-    
-    # Priority 3: Try GCS (can access secrets here since this function is not cached)
-    print("Attempting to load from GCS...", file=sys.stderr)
-    if GCS_AVAILABLE:
-        try:
-            print("Checking for GCS secrets...", file=sys.stderr)
-            # Can access secrets here since this function is not cached
-            if 'gcp' in st.secrets:
-                print("GCP secrets found, calling _load_data_from_gcs_internal()...", file=sys.stderr)
-                gcs_data = _load_data_from_gcs_internal(show_progress=False)
-                print(f"_load_data_from_gcs_internal() returned: {gcs_data is not None}", file=sys.stderr)
-                if gcs_data is not None and len(gcs_data) > 0:
-                    print(f"GCS data loaded successfully, length: {len(gcs_data)}", file=sys.stderr)
-                    return gcs_data
-            else:
-                print("GCP secrets not found", file=sys.stderr)
-        except Exception as e:
-            print(f"ERROR loading from GCS: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
+    # If data loaded successfully, return it
+    if df is not None:
+        return df
     
     # If data not found, show error and offer file uploader
-    print("No data found, showing file uploader", file=sys.stderr)
     st.error("**Data file not found**")
     st.info("""
     **For local development:**
@@ -732,283 +321,86 @@ def load_data_with_fallback():
     # Offer file uploader as fallback (this is outside cached function)
     uploaded_file = st.file_uploader("Upload cleaned data file (CSV)", type=['csv'])
     if uploaded_file is not None:
-        try:
-            print("User uploaded file, loading...", file=sys.stderr)
-            with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
-                tmp_file.write(uploaded_file.getvalue())
-                tmp_path = tmp_file.name
-            return load_data_from_file(tmp_path)
-        except Exception as e:
-            print(f"ERROR loading uploaded file: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            st.error(f"Error loading uploaded file: {str(e)}")
-            return None
+        with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = tmp_file.name
+        return load_data_from_file(tmp_path)
     
-    return None
+    st.stop()
 
 def main():
     """Main dashboard application"""
-    import sys
-    
-    print("main() function called", file=sys.stderr)
     
     # Header
-    try:
-        print("Displaying header...", file=sys.stderr)
-        st.markdown('<h1 class="main-header">Freight Import Data Dashboard</h1>', unsafe_allow_html=True)
-        st.markdown("---")
-        print("Header displayed successfully", file=sys.stderr)
-    except Exception as e:
-        print(f"ERROR displaying header: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        raise
+    st.markdown('<h1 class="main-header">Freight Import Data Dashboard</h1>', unsafe_allow_html=True)
+    st.markdown("---")
     
-    # Load data with error handling
-    try:
-        print("Calling load_data_with_fallback()...", file=sys.stderr)
-        df = load_data_with_fallback()
-        print(f"load_data_with_fallback() returned: df is {df is not None}, length={len(df) if df is not None else 0}", file=sys.stderr)
-        
-        # Check if data was loaded successfully
-        if df is None or len(df) == 0:
-            print("Data is None or empty, showing warning", file=sys.stderr)
-            st.warning("⚠️ No data available. Please configure data source or upload a file.")
-            return
-        
-        print(f"Data loaded: {len(df)} rows, columns: {list(df.columns)[:5]}...", file=sys.stderr)
-        
-        # Validate required columns exist
-        print("Validating required columns...", file=sys.stderr)
-        required_columns = ['year', 'month', 'country_description', 'valuecif', 'valuefob', 'weight']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            print(f"Missing columns: {missing_columns}", file=sys.stderr)
-            st.error(f"⚠️ Missing required columns: {', '.join(missing_columns)}")
-            st.info("Please ensure your data file contains all required columns.")
-            return
-        
-        print("Column validation passed", file=sys.stderr)
-            
-    except Exception as e:
-        print(f"ERROR in data loading/validation: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        st.error(f"⚠️ Error loading or processing data: {str(e)}")
-        with st.expander("Show error details"):
-            st.code(traceback.format_exc())
-        return
+    # Load data
+    df = load_data_with_fallback()
     
     # Sidebar filters
-    try:
-        print("Setting up sidebar filters...", file=sys.stderr)
-        st.sidebar.header("Filters")
-        
-        # Year filter
-        print("Getting available years...", file=sys.stderr)
-        try:
-            available_years = sorted(df['year'].dropna().unique())
-            print(f"Available years: {list(available_years)[:5]}... (total: {len(available_years)})", file=sys.stderr)
-        except Exception as e:
-            print(f"ERROR getting years: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            raise
-        
-        selected_years = st.sidebar.multiselect(
-            "Select Years",
-            options=available_years,
-            default=available_years if len(available_years) <= 10 else available_years[:10]
-        )
-        print(f"Selected years: {selected_years}", file=sys.stderr)
-        
-        # Month filter
-        print("Getting available months...", file=sys.stderr)
-        try:
-            available_months = sorted(df['month'].dropna().unique())
-            print(f"Available months: {list(available_months)[:5]}... (total: {len(available_months)})", file=sys.stderr)
-        except Exception as e:
-            print(f"ERROR getting months: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            raise
-        
-        selected_months = st.sidebar.multiselect(
-            "Select Months",
-            options=available_months,
-            default=available_months if len(available_months) <= 12 else available_months[:12]
-        )
-        print(f"Selected months: {selected_months}", file=sys.stderr)
-        
-        # Country filter
-        print("Getting top countries...", file=sys.stderr)
-        try:
-            top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(20).index.tolist()
-            print(f"Top countries: {top_countries[:5]}... (total: {len(top_countries)})", file=sys.stderr)
-        except Exception as e:
-            print(f"ERROR getting countries: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            raise
-        
-        selected_countries = st.sidebar.multiselect(
-            "Select Countries (Top 20)",
-            options=top_countries,
-            default=[]
-        )
-        print(f"Selected countries: {selected_countries}", file=sys.stderr)
-    except Exception as e:
-        print(f"ERROR setting up filters: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        st.error(f"Error setting up filters: {str(e)}")
-        with st.expander("Show error details"):
-            st.code(traceback.format_exc())
-        return
+    st.sidebar.header("Filters")
+    
+    # Year filter
+    available_years = sorted(df['year'].unique())
+    selected_years = st.sidebar.multiselect(
+        "Select Years",
+        options=available_years,
+        default=available_years
+    )
+    
+    # Month filter
+    available_months = sorted(df['month'].unique())
+    selected_months = st.sidebar.multiselect(
+        "Select Months",
+        options=available_months,
+        default=available_months
+    )
+    
+    # Country filter
+    top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(20).index.tolist()
+    selected_countries = st.sidebar.multiselect(
+        "Select Countries (Top 20)",
+        options=top_countries,
+        default=[]
+    )
     
     # Apply filters
-    try:
-        print("Applying filters...", file=sys.stderr)
-        print(f"Before filtering: {len(df)} rows", file=sys.stderr)
-        print(f"Dataframe memory usage: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB", file=sys.stderr)
-        
-        # Convert numpy types to Python types for comparison
-        print("Converting year types...", file=sys.stderr)
-        try:
-            selected_years_py = [int(y) for y in selected_years] if selected_years else []
-            print(f"Selected years (converted): {selected_years_py}", file=sys.stderr)
-        except Exception as e:
-            print(f"ERROR converting years: {e}", file=sys.stderr)
-            raise
-        
-        # Apply filters incrementally without copying first (more memory efficient)
-        print("Building filter mask...", file=sys.stderr)
-        try:
-            # Start with all True (no filter)
-            mask = pd.Series(True, index=df.index)
-            print(f"Initial mask created: {len(mask)} rows", file=sys.stderr)
-        except Exception as e:
-            print(f"ERROR creating mask: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            raise
-        
-        if selected_years:
-            print("Applying year filter...", file=sys.stderr)
-            try:
-                # Ensure year column is numeric
-                if df['year'].dtype != 'int64':
-                    print(f"Converting year column from {df['year'].dtype} to int64", file=sys.stderr)
-                    df['year'] = df['year'].astype('int64')
-                
-                year_mask = df['year'].isin(selected_years_py)
-                mask = mask & year_mask
-                print(f"Year filter applied: {mask.sum()} rows match", file=sys.stderr)
-            except Exception as e:
-                print(f"ERROR applying year filter: {e}", file=sys.stderr)
-                import traceback
-                traceback.print_exc(file=sys.stderr)
-                raise
-        
-        if selected_months:
-            print("Applying month filter...", file=sys.stderr)
-            try:
-                month_mask = df['month'].isin(selected_months)
-                mask = mask & month_mask
-                print(f"Month filter applied: {mask.sum()} rows match", file=sys.stderr)
-            except Exception as e:
-                print(f"ERROR applying month filter: {e}", file=sys.stderr)
-                import traceback
-                traceback.print_exc(file=sys.stderr)
-                raise
-        
-        if selected_countries:
-            print("Applying country filter...", file=sys.stderr)
-            try:
-                country_mask = df['country_description'].isin(selected_countries)
-                mask = mask & country_mask
-                print(f"Country filter applied: {mask.sum()} rows match", file=sys.stderr)
-            except Exception as e:
-                print(f"ERROR applying country filter: {e}", file=sys.stderr)
-                import traceback
-                traceback.print_exc(file=sys.stderr)
-                raise
-        
-        print("Applying final filter to dataframe...", file=sys.stderr)
-        try:
-            df_filtered = df[mask].copy()
-            print(f"Filtered dataframe created: {len(df_filtered)} rows", file=sys.stderr)
-        except Exception as e:
-            print(f"ERROR creating filtered dataframe: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            raise
-        
-        print(f"Final filtered dataframe: {len(df_filtered)} rows", file=sys.stderr)
-        print(f"Filtered dataframe memory usage: {df_filtered.memory_usage(deep=True).sum() / 1024**2:.2f} MB", file=sys.stderr)
-    except Exception as e:
-        print(f"ERROR applying filters: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        st.error(f"Error applying filters: {str(e)}")
-        st.error(f"Error type: {type(e).__name__}")
-        with st.expander("Show error details"):
-            st.code(traceback.format_exc())
-        st.info("""
-        **Possible solutions:**
-        1. The dataset might be too large for Streamlit Cloud's memory limits
-        2. Try filtering the data before loading (reduce dataset size)
-        3. Check if the year column has the correct data type
-        """)
-        return
+    df_filtered = df.copy()
+    if selected_years:
+        df_filtered = df_filtered[df_filtered['year'].isin(selected_years)]
+    if selected_months:
+        df_filtered = df_filtered[df_filtered['month'].isin(selected_months)]
+    if selected_countries:
+        df_filtered = df_filtered[df_filtered['country_description'].isin(selected_countries)]
     
     # Table of Contents for quick navigation
-    try:
-        print("Creating table of contents...", file=sys.stderr)
-        st.markdown("---")
-        st.markdown("### Table of Contents")
-        toc_cols = st.columns(4)
-        
-        sections_list = [
-            ("Overview", "overview"),
-            ("Time Series", "time-series"),
-            ("Geographic", "geographic"),
-            ("Commodity", "commodity"),
-            ("Value vs Volume", "value-volume"),
-            ("Risk Analysis", "risk"),
-            ("Transport Mode", "transport"),
-            ("Key Insights", "insights")
-        ]
-        
-        for idx, (name, anchor) in enumerate(sections_list):
-            with toc_cols[idx % 4]:
-                st.markdown(f"[{name}](#{anchor})")
-        
-        st.markdown("---")
-        print("Table of contents created", file=sys.stderr)
-    except Exception as e:
-        print(f"ERROR creating table of contents: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        st.error(f"Error creating navigation: {str(e)}")
-        return
+    st.markdown("---")
+    st.markdown("### Table of Contents")
+    toc_cols = st.columns(4)
+    
+    sections_list = [
+        ("Overview", "overview"),
+        ("Time Series", "time-series"),
+        ("Geographic", "geographic"),
+        ("Commodity", "commodity"),
+        ("Value vs Volume", "value-volume"),
+        ("Risk Analysis", "risk"),
+        ("Transport Mode", "transport"),
+        ("Key Insights", "insights")
+    ]
+    
+    for idx, (name, anchor) in enumerate(sections_list):
+        with toc_cols[idx % 4]:
+            st.markdown(f"[{name}](#{anchor})")
+    
+    st.markdown("---")
     
     # Display all sections on the same page
-    try:
-        print("Displaying Overview section...", file=sys.stderr)
-        # 1. Overview Section
-        st.markdown('<div id="overview"></div>', unsafe_allow_html=True)
-        show_overview(df_filtered)
-        print("Overview section displayed", file=sys.stderr)
-    except Exception as e:
-        print(f"ERROR displaying Overview section: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        st.error(f"Error displaying Overview: {str(e)}")
-        with st.expander("Show error details"):
-            st.code(traceback.format_exc())
-        return
+    
+    # 1. Overview Section
+    st.markdown('<div id="overview"></div>', unsafe_allow_html=True)
+    show_overview(df_filtered)
     
     st.markdown("---")
     
@@ -1054,153 +446,72 @@ def main():
 
 def show_overview(df):
     """Display overview metrics"""
-    import sys
-    print("show_overview() called", file=sys.stderr)
+    st.markdown('<h2 class="section-header">Overview</h2>', unsafe_allow_html=True)
     
-    try:
-        st.markdown('<h2 class="section-header">Overview</h2>', unsafe_allow_html=True)
-        
-        # Key metrics in cards
-        print("Creating metric columns...", file=sys.stderr)
-        col1, col2, col3, col4 = st.columns(4)
-        
-        print("Calculating totals...", file=sys.stderr)
-        try:
-            total_fob = float(df['valuefob'].sum())
-            print(f"Total FOB: {total_fob}", file=sys.stderr)
-        except Exception as e:
-            print(f"ERROR calculating total_fob: {e}", file=sys.stderr)
-            total_fob = 0.0
-        
-        try:
-            total_cif = float(df['valuecif'].sum())
-            print(f"Total CIF: {total_cif}", file=sys.stderr)
-        except Exception as e:
-            print(f"ERROR calculating total_cif: {e}", file=sys.stderr)
-            total_cif = 0.0
-        
-        try:
-            total_weight = float(df['weight'].sum())
-            print(f"Total weight: {total_weight}", file=sys.stderr)
-        except Exception as e:
-            print(f"ERROR calculating total_weight: {e}", file=sys.stderr)
-            total_weight = 0.0
-        
-        total_records = len(df)
-        print(f"Total records: {total_records}", file=sys.stderr)
-        
-        with col1:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-card-title">Total Records</div>
-                <div class="metric-card-value">{total_records:,}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-card-title">Total FOB Value</div>
-                <div class="metric-card-value">${total_fob/1e9:.2f}B</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-card-title">Total CIF Value</div>
-                <div class="metric-card-value">${total_cif/1e9:.2f}B</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col4:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-card-title">Total Weight</div>
-                <div class="metric-card-value">{total_weight/1e6:.2f}M tonnes</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        st.markdown("---")
-        
-        # Year range
-        print("Calculating year range...", file=sys.stderr)
-        try:
-            year_min = float(df['year'].min())
-            year_max = float(df['year'].max())
-            year_range = f"{year_min:.0f} - {year_max:.0f}"
-            st.info(f"Date Range: {year_range}")
-            print(f"Year range: {year_range}", file=sys.stderr)
-        except Exception as e:
-            print(f"ERROR calculating year range: {e}", file=sys.stderr)
-            st.info("Date Range: Unable to calculate")
-        
-        # Quick summary charts
-        print("Creating summary charts...", file=sys.stderr)
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            print("Creating top countries chart...", file=sys.stderr)
-            try:
-                # Top 5 countries
-                top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(5)
-                fig = px.bar(
-                    x=top_countries.values / 1e9,
-                    y=top_countries.index,
-                    orientation='h',
-                    title="Top 5 Countries by Import Value (CIF)",
-                    labels={'x': 'Value (Billions AUD)', 'y': 'Country'}
-                )
-                fig = apply_light_theme(fig)
-                fig.update_layout(height=400)
-                st.plotly_chart(fig, use_container_width=True)
-                print("Top countries chart created", file=sys.stderr)
-            except Exception as e:
-                print(f"ERROR creating top countries chart: {e}", file=sys.stderr)
-                import traceback
-                traceback.print_exc(file=sys.stderr)
-                st.error(f"Error creating chart: {str(e)}")
-        
-        with col2:
-            print("Creating top commodities chart...", file=sys.stderr)
-            try:
-                # Top 5 commodities
-                top_commodities_df = df.groupby('commodity_description')['valuecif'].sum().sort_values(ascending=False).head(5).reset_index()
-                top_commodities_df['commodity_label'] = top_commodities_df['commodity_description'].apply(
-                    lambda x: x[:75] + '...' if len(x) > 75 else x
-                )
-                top_commodities_df['value_billions'] = top_commodities_df['valuecif'] / 1e9
-                fig = px.bar(
-                    top_commodities_df,
-                    x='value_billions',
-                    y='commodity_label',
-                    orientation='h',
-                    title="Top 5 Commodities by Import Value (CIF)",
-                    labels={'value_billions': 'Value (Billions AUD)', 'commodity_label': 'Commodity'},
-                    color='value_billions',
-                    color_continuous_scale='Blues',
-                    hover_data={'commodity_description': True, 'commodity_label': False}
-                )
-                fig.update_traces(hovertemplate='<b>%{customdata[0]}</b><br>Value: %{x:.2f} Billion AUD<extra></extra>',
-                                  customdata=top_commodities_df[['commodity_description']].values)
-                fig = apply_light_theme(fig)
-                fig.update_layout(height=400)
-                st.plotly_chart(fig, use_container_width=True)
-                print("Top commodities chart created", file=sys.stderr)
-            except Exception as e:
-                print(f"ERROR creating top commodities chart: {e}", file=sys.stderr)
-                import traceback
-                traceback.print_exc(file=sys.stderr)
-                st.error(f"Error creating chart: {str(e)}")
-        
-        print("show_overview() completed successfully", file=sys.stderr)
-    except Exception as e:
-        print(f"ERROR in show_overview(): {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        st.error(f"Error displaying overview: {str(e)}")
-        with st.expander("Show error details"):
-            st.code(traceback.format_exc())
+    # Key metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    total_fob = df['valuefob'].sum()
+    total_cif = df['valuecif'].sum()
+    total_weight = df['weight'].sum()
+    total_records = len(df)
+    
+    with col1:
+        st.metric("Total Records", f"{total_records:,}")
+    
+    with col2:
+        st.metric("Total FOB Value", f"${total_fob/1e9:.2f}B")
+    
+    with col3:
+        st.metric("Total CIF Value", f"${total_cif/1e9:.2f}B")
+    
+    with col4:
+        st.metric("Total Weight", f"{total_weight/1e6:.2f}M tonnes")
+    
+    st.markdown("---")
+    
+    # Year range
+    year_range = f"{df['year'].min():.0f} - {df['year'].max():.0f}"
+    st.info(f"Date Range: {year_range}")
+    
+    # Quick summary charts
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Top 5 countries
+        top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(5)
+        fig = px.bar(
+            x=top_countries.values / 1e9,
+            y=top_countries.index,
+            orientation='h',
+            title="Top 5 Countries by Import Value (CIF)",
+            labels={'x': 'Value (Billions AUD)', 'y': 'Country'}
+        )
+        fig.update_layout(height=400)
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        # Top 5 commodities
+        top_commodities_df = df.groupby('commodity_description')['valuecif'].sum().sort_values(ascending=False).head(5).reset_index()
+        top_commodities_df['commodity_label'] = top_commodities_df['commodity_description'].apply(
+            lambda x: x[:75] + '...' if len(x) > 75 else x
+        )
+        top_commodities_df['value_billions'] = top_commodities_df['valuecif'] / 1e9
+        fig = px.bar(
+            top_commodities_df,
+            x='value_billions',
+            y='commodity_label',
+            orientation='h',
+            title="Top 5 Commodities by Import Value (CIF)",
+            labels={'value_billions': 'Value (Billions AUD)', 'commodity_label': 'Commodity'},
+            color='value_billions',
+            color_continuous_scale='Blues',
+            hover_data={'commodity_description': True, 'commodity_label': False}
+        )
+        fig.update_traces(hovertemplate='<b>%{customdata[0]}</b><br>Value: %{x:.2f} Billion AUD<extra></extra>',
+                          customdata=top_commodities_df[['commodity_description']].values)
+        fig.update_layout(height=400)
+        st.plotly_chart(fig, use_container_width=True)
 
 def show_time_series(df):
     """Display time series analysis"""
@@ -2140,62 +1451,6 @@ def show_key_insights(df):
     with col2:
         st.metric("Top 10 Commodities Share", f"{top_10_commodities_pct:.2f}%")
 
-# Main execution - wrap everything to catch any errors
 if __name__ == "__main__":
-    import sys
-    import traceback
-    
-    # Always log to stderr first so errors appear in logs
-    print("=" * 80, file=sys.stderr)
-    print("DASHBOARD STARTING", file=sys.stderr)
-    print("=" * 80, file=sys.stderr)
-    
-    try:
-        print("Calling main()...", file=sys.stderr)
-        main()
-        print("main() completed successfully", file=sys.stderr)
-    except Exception as e:
-        error_msg = f"CRITICAL ERROR: {str(e)}"
-        error_type = type(e).__name__
-        error_trace = traceback.format_exc()
-        
-        # Always print to stderr first (appears in logs)
-        print("=" * 80, file=sys.stderr)
-        print("ERROR CAUGHT:", file=sys.stderr)
-        print(error_msg, file=sys.stderr)
-        print(f"Error Type: {error_type}", file=sys.stderr)
-        print("-" * 80, file=sys.stderr)
-        print(error_trace, file=sys.stderr)
-        print("=" * 80, file=sys.stderr)
-        
-        # Then try to display in Streamlit
-        try:
-            st.error("⚠️ **Critical Error: Dashboard failed to load**")
-            st.error(f"**Error:** {str(e)}")
-            st.error(f"**Error Type:** {error_type}")
-            
-            with st.expander("🔍 Show detailed error information"):
-                st.code(error_trace)
-            
-            st.info("""
-            **Common causes:**
-            1. Missing or incorrect Streamlit secrets configuration
-            2. Data file not available in Google Cloud Storage
-            3. Missing required Python packages
-            4. Data file format issues
-            
-            **To fix:**
-            1. Check Streamlit Cloud logs: Settings → Logs
-            2. Verify GCS secrets are configured correctly
-            3. Ensure data file exists in GCS bucket
-            4. Check that all dependencies are in requirements.txt
-            """)
-        except Exception as display_error:
-            # Even error display failed - log it
-            print(f"ERROR DISPLAY ALSO FAILED: {display_error}", file=sys.stderr)
-            print(traceback.format_exc(), file=sys.stderr)
-            try:
-                st.write("Critical error occurred. Check logs for details.")
-            except:
-                pass
+    main()
 

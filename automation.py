@@ -14,7 +14,6 @@ from pathlib import Path
 import pandas as pd
 import tempfile
 from google.cloud import storage
-from google.cloud import bigquery
 from google.api_core import exceptions as google_exceptions
 import smtplib
 from email.mime.text import MIMEText
@@ -40,11 +39,6 @@ _raw_bucket_name = os.getenv('GCS_BUCKET_NAME', 'freight-import-data')
 GCS_BUCKET_NAME = _raw_bucket_name.strip('"').strip("'").strip()  # Remove quotes and whitespace
 GCS_FILE_NAME = os.getenv('GCS_FILE_NAME', 'imports_2024_2025_cleaned.csv').strip('"').strip("'").strip()
 CHECK_INTERVAL_DAYS = 7  # Check weekly
-
-# BigQuery configuration
-BIGQUERY_DATASET = os.getenv('BIGQUERY_DATASET', 'freight_import_data').strip('"').strip("'").strip()
-BIGQUERY_TABLE = os.getenv('BIGQUERY_TABLE', 'imports_cleaned').strip('"').strip("'").strip()
-BIGQUERY_PROJECT = os.getenv('BIGQUERY_PROJECT', '').strip('"').strip("'").strip()  # Will try to detect from credentials
 
 # Email configuration (from environment variables)
 EMAIL_FROM = os.getenv('EMAIL_FROM')
@@ -374,112 +368,13 @@ Original error: {str(perm_error)}
         raise
 
 
-def upload_to_bigquery(file_path):
-    """Upload cleaned data file to BigQuery table"""
-    try:
-        logger.info(f"Uploading {file_path} to BigQuery...")
-        
-        # Get BigQuery configuration
-        dataset_id = BIGQUERY_DATASET
-        table_id = BIGQUERY_TABLE
-        
-        logger.info(f"BigQuery Dataset: {dataset_id}")
-        logger.info(f"BigQuery Table: {table_id}")
-        
-        # Initialize BigQuery client
-        creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-        if creds_path and os.path.exists(creds_path):
-            logger.info(f"Using credentials from: {creds_path}")
-            client = bigquery.Client.from_service_account_json(creds_path)
-            # Get project ID from credentials if not set
-            if not BIGQUERY_PROJECT:
-                import json
-                with open(creds_path, 'r') as f:
-                    creds_data = json.load(f)
-                    project_id = creds_data.get('project_id')
-                    if project_id:
-                        client.project = project_id
-                        logger.info(f"Using project ID from credentials: {project_id}")
-        else:
-            logger.info("Using default credentials")
-            client = bigquery.Client()
-        
-        project_id = client.project or BIGQUERY_PROJECT
-        if not project_id:
-            raise ValueError("BigQuery project ID not found. Set BIGQUERY_PROJECT environment variable.")
-        
-        logger.info(f"Using project: {project_id}")
-        
-        # Construct full table reference
-        table_ref = f"{project_id}.{dataset_id}.{table_id}"
-        logger.info(f"Full table reference: {table_ref}")
-        
-        # Check if dataset exists, create if not
-        try:
-            dataset = client.get_dataset(dataset_id)
-            logger.info(f"Dataset '{dataset_id}' already exists")
-        except Exception:
-            logger.info(f"Creating dataset '{dataset_id}'...")
-            dataset = bigquery.Dataset(f"{project_id}.{dataset_id}")
-            dataset.location = "US"  # Set location
-            dataset = client.create_dataset(dataset, exists_ok=True)
-            logger.info(f"Dataset '{dataset_id}' created")
-        
-        # Configure load job
-        job_config = bigquery.LoadJobConfig(
-            source_format=bigquery.SourceFormat.CSV,
-            skip_leading_rows=1,  # Skip header row
-            autodetect=True,  # Auto-detect schema
-            write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,  # Replace table contents
-            allow_quoted_newlines=True,
-        )
-        
-        # Load data from CSV file
-        logger.info(f"Loading data from {file_path} to {table_ref}...")
-        with open(file_path, "rb") as source_file:
-            job = client.load_table_from_file(source_file, table_ref, job_config=job_config)
-        
-        # Wait for job to complete
-        logger.info(f"BigQuery load job started: {job.job_id}")
-        job.result()  # Wait for the job to complete
-        
-        # Get table info
-        table = client.get_table(table_ref)
-        logger.info(f"Successfully loaded {table.num_rows:,} rows to {table_ref}")
-        logger.info(f"Table size: {table.num_bytes / (1024**2):.2f} MB")
-        
-        return True
-        
-    except Exception as e:
-        logger.error("=" * 60)
-        logger.error("BIGQUERY UPLOAD ERROR")
-        logger.error("=" * 60)
-        logger.error(f"Error type: {type(e).__name__}")
-        logger.error(f"Error message: {str(e)}")
-        logger.error(f"Dataset: {BIGQUERY_DATASET}")
-        logger.error(f"Table: {BIGQUERY_TABLE}")
-        logger.error(f"Project: {BIGQUERY_PROJECT or 'Auto-detect'}")
-        logger.exception("Full traceback:")
-        # Don't fail the entire pipeline if BigQuery upload fails
-        logger.warning("BigQuery upload failed, but continuing with GCS upload...")
-        return False
-
-
 def send_email_notification(success=True, message=""):
     """Send email notification about automation status"""
     if not EMAIL_FROM or not EMAIL_TO or not EMAIL_PASSWORD:
         logger.warning("Email not configured. Skipping notification.")
-        logger.warning(f"EMAIL_FROM: {'Set' if EMAIL_FROM else 'Not set'}")
-        logger.warning(f"EMAIL_TO: {'Set' if EMAIL_TO else 'Not set'}")
-        logger.warning(f"EMAIL_PASSWORD: {'Set' if EMAIL_PASSWORD else 'Not set'}")
         return
     
     try:
-        logger.info("Preparing email notification...")
-        logger.info(f"SMTP Server: {SMTP_SERVER}:{SMTP_PORT}")
-        logger.info(f"From: {EMAIL_FROM}")
-        logger.info(f"To: {EMAIL_TO}")
-        
         msg = MIMEMultipart()
         msg['From'] = EMAIL_FROM
         msg['To'] = EMAIL_TO
@@ -500,46 +395,15 @@ This is an automated message from the Freight Import Data Pipeline.
         
         msg.attach(MIMEText(body, 'plain'))
         
-        logger.info("Connecting to SMTP server...")
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30)
-        
-        logger.info("Starting TLS...")
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
         server.starttls()
-        
-        logger.info("Logging in to SMTP server...")
         server.login(EMAIL_FROM, EMAIL_PASSWORD)
-        
-        logger.info("Sending email message...")
         server.send_message(msg)
-        
-        logger.info("Closing SMTP connection...")
         server.quit()
         
         logger.info("Email notification sent successfully")
-    except smtplib.SMTPException as e:
-        logger.error("=" * 60)
-        logger.error("SMTP ERROR - Email notification failed")
-        logger.error("=" * 60)
-        logger.error(f"SMTP Error Type: {type(e).__name__}")
-        logger.error(f"SMTP Error Message: {str(e)}")
-        logger.error(f"SMTP Server: {SMTP_SERVER}:{SMTP_PORT}")
-        logger.error(f"From: {EMAIL_FROM}")
-        logger.error(f"To: {EMAIL_TO}")
-        import traceback
-        logger.error("Full SMTP traceback:")
-        logger.error(traceback.format_exc())
     except Exception as e:
-        logger.error("=" * 60)
-        logger.error("ERROR - Email notification failed")
-        logger.error("=" * 60)
-        logger.error(f"Error Type: {type(e).__name__}")
-        logger.error(f"Error Message: {str(e)}")
-        logger.error(f"SMTP Server: {SMTP_SERVER}:{SMTP_PORT}")
-        logger.error(f"From: {EMAIL_FROM}")
-        logger.error(f"To: {EMAIL_TO}")
-        import traceback
-        logger.error("Full traceback:")
-        logger.error(traceback.format_exc())
+        logger.error(f"Error sending email notification: {e}")
 
 
 def run_automation():
@@ -559,53 +423,16 @@ def run_automation():
         # Step 1: Check for new data
         has_new_data, last_modified, latest_data_date = check_for_new_data()
         
-        # Check if BigQuery table exists (for initial setup)
-        bigquery_table_exists = False
-        try:
-            creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-            if creds_path and os.path.exists(creds_path):
-                bq_client = bigquery.Client.from_service_account_json(creds_path)
-            else:
-                bq_client = bigquery.Client()
-            
-            project_id = bq_client.project or BIGQUERY_PROJECT
-            if project_id:
-                table_ref = f"{project_id}.{BIGQUERY_DATASET}.{BIGQUERY_TABLE}"
-                try:
-                    bq_client.get_table(table_ref)
-                    bigquery_table_exists = True
-                    logger.info(f"BigQuery table exists: {table_ref}")
-                except Exception:
-                    logger.info(f"BigQuery table does not exist: {table_ref}")
-                    bigquery_table_exists = False
-        except Exception as e:
-            logger.warning(f"Could not check BigQuery table existence: {e}")
-            bigquery_table_exists = False
-        
-        # If no new data AND BigQuery table exists, skip processing
-        if not has_new_data and bigquery_table_exists:
+        if not has_new_data:
             message = f"No new data detected. Last modified: {last_modified}"
             logger.info(message)
             send_email_notification(success=True, message=message)
             return True
         
-        # If no new data BUT BigQuery table doesn't exist, process anyway (initial setup)
-        if not has_new_data and not bigquery_table_exists:
-            logger.info("No new data detected, but BigQuery table doesn't exist.")
-            logger.info("Processing existing data to create BigQuery table (initial setup)...")
-            # For initial BigQuery setup, download fresh data to get full dataset
-            logger.info("Downloading full dataset for BigQuery initial upload...")
-            new_df = extract_imports_2024_2025()
-            if new_df is None or len(new_df) == 0:
-                raise Exception("Failed to download data for BigQuery setup")
-            logger.info(f"Downloaded {len(new_df):,} records for BigQuery upload")
-            # Use the full downloaded dataset (not merged with existing)
-            merged_df = new_df
-        else:
-            # Step 2: Download and merge data (normal flow)
-            merged_df = download_and_merge_data()
-            if merged_df is None:
-                raise Exception("Failed to download/merge data")
+        # Step 2: Download and merge data
+        merged_df = download_and_merge_data()
+        if merged_df is None:
+            raise Exception("Failed to download/merge data")
         
         # Step 3: Save merged data temporarily
         DATA_DIR.mkdir(exist_ok=True)
@@ -633,7 +460,7 @@ def run_automation():
             logger.warning("Continuing with upload despite analysis error...")
             # Don't fail the pipeline if analysis has issues - we still want to upload data
         
-        # Step 6: Upload to GCS (keep for backup/file storage)
+        # Step 6: Upload to GCS
         try:
             upload_to_gcs(str(temp_cleaned_file))
             logger.info("GCS upload completed successfully")
@@ -643,26 +470,7 @@ def run_automation():
             # Don't fail the entire pipeline if upload fails - we can retry
             raise Exception(f"Failed to upload to GCS: {upload_error}")
         
-        # Step 7: Upload to BigQuery (for efficient querying)
-        # Upload the cleaned file (which has deduplicated data)
-        # Note: If you want the full dataset without deduplication, upload temp_raw_file instead
-        try:
-            # Check if BigQuery table exists and has fewer rows than expected
-            # If so, we might want to upload the full dataset
-            bigquery_success = upload_to_bigquery(str(temp_cleaned_file))
-            if bigquery_success:
-                logger.info("BigQuery upload completed successfully")
-                # Log row count for verification
-                logger.info(f"Uploaded {len(pd.read_csv(temp_cleaned_file, nrows=1)) if temp_cleaned_file.exists() else 0:,} rows to BigQuery")
-            else:
-                logger.warning("BigQuery upload failed, but GCS upload succeeded")
-        except Exception as bigquery_error:
-            logger.error(f"BigQuery upload failed: {bigquery_error}")
-            logger.exception("BigQuery upload traceback:")
-            # Don't fail the entire pipeline if BigQuery upload fails - GCS is backup
-            logger.warning("BigQuery upload failed, but continuing since GCS upload succeeded")
-        
-        # Step 8: Cleanup temporary files
+        # Step 7: Cleanup temporary files
         if temp_raw_file.exists():
             os.unlink(temp_raw_file)
         if temp_cleaned_file.exists():
@@ -682,9 +490,8 @@ Summary:
 - Total records processed: {len(merged_df):,}
 - Duration: {duration:.1f} minutes
 - Data uploaded to: gs://{GCS_BUCKET_NAME}/{GCS_FILE_NAME}
-- Data uploaded to BigQuery: {BIGQUERY_DATASET}.{BIGQUERY_TABLE}
 
-Dashboard will auto-update on Streamlit Cloud and query from BigQuery.
+Dashboard will auto-update on Streamlit Cloud.
         """
         
         logger.info(message)
