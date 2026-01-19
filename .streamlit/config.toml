@@ -1,11 +1,12 @@
 [server]
-headless = false
-port = 8501
+# Streamlit Cloud manages these settings automatically
+# headless = true  # Streamlit Cloud runs headless
+# port = 8501     # Streamlit Cloud sets the port
 enableXsrfProtection = true
 
 [browser]
 gatherUsageStats = false
-serverAddress = "localhost"
+# serverAddress is managed by Streamlit Cloud
 
 [theme]
 primaryColor = "#1f77b4"
