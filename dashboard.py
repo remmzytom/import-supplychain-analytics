@@ -432,42 +432,30 @@ def query_bigquery(filters=None, limit_rows=None):
                     return None
                 
                 # Load data in chunks to prevent memory overflow
-                chunk_size = 500000  # 500K rows per chunk
+                # Use smaller chunks (100K) to stay well within memory limits
+                chunk_size = 100000  # 100K rows per chunk (much safer)
                 all_chunks = []
                 total_rows_loaded = 0
                 
                 # Load data in chunks using multiple queries with LIMIT/OFFSET
                 # Need ORDER BY for consistent pagination
-                status_text.info("Loading data in chunks to prevent memory issues...")
+                status_text.info("Loading data in chunks (100K rows each) to prevent memory issues...")
                 
                 # Check if query already has ORDER BY
                 query_lower = query.lower()
                 has_order_by = 'order by' in query_lower
                 
                 # Add ORDER BY if not present (needed for consistent pagination)
+                # Use a simple, reliable ordering
                 if not has_order_by:
-                    # Use a combination of columns for ordering to ensure consistency
-                    order_by_cols = []
-                    if 'year' in query_lower:
-                        order_by_cols.append('year')
-                    if 'month_number' in query_lower:
-                        order_by_cols.append('month_number')
-                    if 'country_code' in query_lower:
-                        order_by_cols.append('country_code')
-                    if 'commodity_code' in query_lower:
-                        order_by_cols.append('commodity_code')
-                    
-                    if order_by_cols:
-                        order_clause = ' ORDER BY ' + ', '.join(order_by_cols)
-                        paginated_query = query + order_clause
-                    else:
-                        # Fallback: order by first column
-                        paginated_query = query + ' ORDER BY 1'
+                    # Try to use year, month_number if they exist, otherwise use first column
+                    # We'll check if columns exist in the actual query result
+                    paginated_query = query + ' ORDER BY year, month_number, country_code, commodity_code'
                 else:
                     paginated_query = query
                 
                 chunk_num = 0
-                max_chunks = 20  # Safety limit: max 10M rows (20 chunks * 500K)
+                max_chunks = 50  # Safety limit: max 5M rows (50 chunks * 100K)
                 
                 try:
                     while chunk_num < max_chunks:
@@ -498,23 +486,38 @@ def query_bigquery(filters=None, limit_rows=None):
                                 # Later chunk failed - we've probably reached the end
                                 break
                         
-                        # Load chunk into dataframe
-                        df_chunk = chunk_job.to_dataframe()
+                        # Load chunk into dataframe with error handling
+                        try:
+                            df_chunk = chunk_job.to_dataframe(max_results=chunk_size)
+                        except Exception as df_error:
+                            # If max_results doesn't work, try without it
+                            try:
+                                df_chunk = chunk_job.to_dataframe()
+                            except Exception as df_error2:
+                                st.error(f"Error loading chunk {chunk_num} into dataframe: {str(df_error2)}")
+                                if chunk_num == 1:
+                                    raise df_error2
+                                else:
+                                    break
                         
                         if df_chunk is None or len(df_chunk) == 0:
                             # No more data
                             break
                         
                         # Optimize data types immediately to reduce memory
-                        if 'year' in df_chunk.columns:
-                            df_chunk['year'] = pd.to_numeric(df_chunk['year'], downcast='integer')
-                        if 'month_number' in df_chunk.columns:
-                            df_chunk['month_number'] = pd.to_numeric(df_chunk['month_number'], downcast='integer')
-                        
-                        float_cols = ['valuecif', 'valuefob', 'weight', 'quantity']
-                        for col in float_cols:
-                            if col in df_chunk.columns:
-                                df_chunk[col] = pd.to_numeric(df_chunk[col], downcast='float')
+                        try:
+                            if 'year' in df_chunk.columns:
+                                df_chunk['year'] = pd.to_numeric(df_chunk['year'], downcast='integer')
+                            if 'month_number' in df_chunk.columns:
+                                df_chunk['month_number'] = pd.to_numeric(df_chunk['month_number'], downcast='integer')
+                            
+                            float_cols = ['valuecif', 'valuefob', 'weight', 'quantity']
+                            for col in float_cols:
+                                if col in df_chunk.columns:
+                                    df_chunk[col] = pd.to_numeric(df_chunk[col], downcast='float')
+                        except Exception as opt_error:
+                            # Optimization failed, but continue with chunk
+                            st.warning(f"Warning: Could not optimize chunk {chunk_num} data types: {str(opt_error)}")
                         
                         all_chunks.append(df_chunk)
                         total_rows_loaded += len(df_chunk)
@@ -528,48 +531,61 @@ def query_bigquery(filters=None, limit_rows=None):
                         if len(df_chunk) < chunk_size:
                             break
                         
-                        # Free memory periodically
-                        if chunk_num % 5 == 0:
-                            import gc
-                            gc.collect()
+                        # Free memory after every chunk to prevent accumulation
+                        import gc
+                        gc.collect()
                 
                 except Exception as chunk_error:
                     # If chunking fails, try to use what we have
+                    import traceback
+                    error_trace = traceback.format_exc()
+                    print(f"Chunked loading error: {error_trace}", file=sys.stderr)
+                    
                     if len(all_chunks) > 0:
                         st.warning(f"Error during chunked loading: {str(chunk_error)}. Using {total_rows_loaded:,} rows loaded so far.")
                     else:
-                        # No chunks loaded - try fallback to single load
-                        st.warning("Chunked loading failed. Attempting single load (may cause memory issues)...")
-                        try:
-                            df = query_job.to_dataframe()
-                            all_chunks = [df]
-                            total_rows_loaded = len(df)
-                        except Exception as fallback_error:
-                            st.error(f"Failed to load data: {str(fallback_error)}")
-                            return None
+                        # No chunks loaded - suggest fallback to GCS
+                        st.error(f"Chunked loading failed: {str(chunk_error)}")
+                        st.warning("BigQuery chunked loading is not working. Falling back to GCS...")
+                        return None  # Will trigger fallback to GCS
                 
                 # Combine all chunks
                 if not all_chunks:
                     st.error("No data loaded from BigQuery")
                     return None
                 
-                status_text.info("Combining chunks...")
-                if len(all_chunks) == 1:
-                    df = all_chunks[0]
+                status_text.info(f"Combining {len(all_chunks)} chunks...")
+                
+                # If we only have a few chunks, combine all at once
+                if len(all_chunks) <= 5:
+                    df = pd.concat(all_chunks, ignore_index=True)
                 else:
-                    # Combine chunks incrementally to avoid memory spike
+                    # For many chunks, combine incrementally in batches
                     df = all_chunks[0]
-                    for i, chunk in enumerate(all_chunks[1:], 1):
-                        df = pd.concat([df, chunk], ignore_index=True)
-                        # Free memory after each concatenation
-                        if i % 3 == 0:
-                            import gc
-                            gc.collect()
+                    batch_size = 3
+                    for i in range(1, len(all_chunks), batch_size):
+                        batch = all_chunks[i:i+batch_size]
+                        if len(batch) == 1:
+                            df = pd.concat([df, batch[0]], ignore_index=True)
+                        else:
+                            batch_df = pd.concat(batch, ignore_index=True)
+                            df = pd.concat([df, batch_df], ignore_index=True)
+                            del batch_df
+                        
+                        # Free memory after each batch
+                        import gc
+                        gc.collect()
+                        status_text.info(f"Combined {min(i+batch_size, len(all_chunks))}/{len(all_chunks)} chunks...")
                 
                 # Final cleanup
                 del all_chunks
                 import gc
                 gc.collect()
+                
+                # Verify final dataframe
+                if df is None or len(df) == 0:
+                    st.error("Failed to combine chunks - empty dataframe")
+                    return None
                 
                 progress_bar.progress(1.0)
                 status_text.empty()
