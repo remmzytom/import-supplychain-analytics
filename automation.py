@@ -380,17 +380,21 @@ def send_email_notification(success=True, message=""):
         msg['To'] = EMAIL_TO
         msg['Subject'] = f"Freight Import Data Pipeline - {'SUCCESS' if success else 'FAILURE'}"
         
+        status_emoji = "✅" if success else "❌"
+        status_color = "green" if success else "red"
+        
         body = f"""
 Freight Import Data Pipeline Automation Report
-{'=' * 50}
+{'=' * 60}
 
-Status: {'SUCCESS' if success else 'FAILURE'}
-Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+{status_emoji} Status: {'SUCCESS' if success else 'FAILURE'}
+📅 Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
 
 {message}
 
 ---
 This is an automated message from the Freight Import Data Pipeline.
+You are receiving this because EMAIL_TO is configured in GitHub Secrets.
         """
         
         msg.attach(MIMEText(body, 'plain'))
@@ -481,17 +485,42 @@ def run_automation():
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds() / 60
         
+        # Check if BigQuery upload was successful
+        bigquery_status = "Not attempted"
+        try:
+            from google.cloud import bigquery
+            BIGQUERY_DATASET = os.getenv('BIGQUERY_DATASET', 'freight_import_data')
+            BIGQUERY_TABLE = os.getenv('BIGQUERY_TABLE', 'imports_cleaned')
+            BIGQUERY_PROJECT = os.getenv('BIGQUERY_PROJECT', '')
+            
+            # Try to check if BigQuery table exists and has data
+            client = bigquery.Client()
+            if BIGQUERY_PROJECT:
+                client.project = BIGQUERY_PROJECT
+            
+            table_ref = f"{client.project}.{BIGQUERY_DATASET}.{BIGQUERY_TABLE}"
+            try:
+                table = client.get_table(table_ref)
+                bigquery_status = f"Success - {table.num_rows:,} rows"
+            except:
+                bigquery_status = "Table not found"
+        except Exception as bq_check_error:
+            bigquery_status = f"Check failed: {str(bq_check_error)[:50]}"
+        
         message = f"""
 Pipeline completed successfully!
 
 Summary:
 - New data detected: Yes
 - Last modified: {last_modified}
+- Latest data date: {latest_data_date}
 - Total records processed: {len(merged_df):,}
 - Duration: {duration:.1f} minutes
-- Data uploaded to: gs://{GCS_BUCKET_NAME}/{GCS_FILE_NAME}
+- Data uploaded to GCS: gs://{GCS_BUCKET_NAME}/{GCS_FILE_NAME}
+- BigQuery status: {bigquery_status}
 
 Dashboard will auto-update on Streamlit Cloud.
+Next check: {datetime.now() + timedelta(days=CHECK_INTERVAL_DAYS)} (weekly)
         """
         
         logger.info(message)
@@ -510,8 +539,14 @@ Pipeline FAILED!
 Error Type: {error_type}
 Error: {error_message}
 Duration: {duration:.1f} minutes
+Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
 
-Please check logs for details.
+Please check GitHub Actions logs for details:
+- Go to your repository → Actions tab
+- Check the latest workflow run
+- Review automation.log artifact
+
+The pipeline will retry automatically next week.
         """
         
         logger.error("=" * 60)
