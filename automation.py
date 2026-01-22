@@ -370,11 +370,26 @@ Original error: {str(perm_error)}
 
 def send_email_notification(success=True, message=""):
     """Send email notification about automation status"""
+    # Log email configuration status (without exposing passwords)
+    logger.info("=" * 60)
+    logger.info("EMAIL NOTIFICATION CHECK")
+    logger.info("=" * 60)
+    logger.info(f"EMAIL_FROM configured: {'Yes' if EMAIL_FROM else 'No'}")
+    logger.info(f"EMAIL_TO configured: {'Yes' if EMAIL_TO else 'No'}")
+    logger.info(f"EMAIL_PASSWORD configured: {'Yes' if EMAIL_PASSWORD else 'No'}")
+    logger.info(f"SMTP_SERVER: {SMTP_SERVER}")
+    logger.info(f"SMTP_PORT: {SMTP_PORT}")
+    
     if not EMAIL_FROM or not EMAIL_TO or not EMAIL_PASSWORD:
         logger.warning("Email not configured. Skipping notification.")
+        logger.warning(f"Missing: EMAIL_FROM={bool(EMAIL_FROM)}, EMAIL_TO={bool(EMAIL_TO)}, EMAIL_PASSWORD={bool(EMAIL_PASSWORD)}")
         return
     
     try:
+        logger.info(f"Preparing email notification...")
+        logger.info(f"From: {EMAIL_FROM}")
+        logger.info(f"To: {EMAIL_TO}")
+        
         msg = MIMEMultipart()
         msg['From'] = EMAIL_FROM
         msg['To'] = EMAIL_TO
@@ -399,15 +414,44 @@ You are receiving this because EMAIL_TO is configured in GitHub Secrets.
         
         msg.attach(MIMEText(body, 'plain'))
         
+        logger.info(f"Connecting to SMTP server: {SMTP_SERVER}:{SMTP_PORT}")
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        logger.info("Starting TLS...")
         server.starttls()
+        logger.info("Logging in to SMTP server...")
         server.login(EMAIL_FROM, EMAIL_PASSWORD)
+        logger.info("Sending email message...")
         server.send_message(msg)
+        logger.info("Closing SMTP connection...")
         server.quit()
         
-        logger.info("Email notification sent successfully")
+        logger.info("=" * 60)
+        logger.info("✅ Email notification sent successfully!")
+        logger.info(f"   Sent to: {EMAIL_TO}")
+        logger.info("=" * 60)
+    except smtplib.SMTPAuthenticationError as auth_error:
+        logger.error("=" * 60)
+        logger.error("❌ SMTP Authentication Error!")
+        logger.error(f"Error: {str(auth_error)}")
+        logger.error("Possible causes:")
+        logger.error("1. Incorrect email password (should be App Password, not regular password)")
+        logger.error("2. 2-Step Verification not enabled")
+        logger.error("3. App Password not generated correctly")
+        logger.error("=" * 60)
+    except smtplib.SMTPException as smtp_error:
+        logger.error("=" * 60)
+        logger.error("❌ SMTP Error!")
+        logger.error(f"Error: {str(smtp_error)}")
+        logger.error("=" * 60)
     except Exception as e:
-        logger.error(f"Error sending email notification: {e}")
+        logger.error("=" * 60)
+        logger.error("❌ Error sending email notification!")
+        logger.error(f"Error Type: {type(e).__name__}")
+        logger.error(f"Error Message: {str(e)}")
+        import traceback
+        logger.error("Full traceback:")
+        logger.error(traceback.format_exc())
+        logger.error("=" * 60)
 
 
 def run_automation():
