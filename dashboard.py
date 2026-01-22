@@ -215,16 +215,13 @@ def _load_data_from_gcs_internal(show_progress=False):
                 st.success("File downloaded successfully!")
             
             # Load data from temporary file
-            # For Streamlit Cloud, limit to 2M rows to prevent memory issues
-            # Users can filter further in the dashboard
-            MAX_ROWS_FOR_STREAMLIT_CLOUD = 2000000  # 2M rows max
-            
+            # Load ALL data using chunked reading (already implemented in load_data_from_file)
             if show_progress:
-                st.info("Loading data into memory...")
-                st.warning(f"⚠️ Large dataset detected. Loading up to {MAX_ROWS_FOR_STREAMLIT_CLOUD:,} rows to prevent memory issues.")
-                st.info("💡 Tip: Use filters in the sidebar to focus on specific data after loading.")
+                st.info("Loading data into memory using chunked reading...")
+                st.info("This will load all 4.48M rows efficiently in chunks.")
             
-            df = load_data_from_file(tmp_path, max_rows=MAX_ROWS_FOR_STREAMLIT_CLOUD)
+            # Load all data (no limit) - chunked loading handles memory efficiently
+            df = load_data_from_file(tmp_path, max_rows=None)
             
             if df is None:
                 # Error already displayed in load_data_from_file
