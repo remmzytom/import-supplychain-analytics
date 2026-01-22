@@ -737,9 +737,14 @@ def main():
     # Sidebar filters
     st.sidebar.header("Filters")
     
-    # Year filter - use dropna and optimize
+    # Year filter - optimize for large datasets
     try:
-        available_years = sorted(df['year'].dropna().unique())
+        # For very large datasets, sample first to get unique values faster
+        if len(df) > 2000000:
+            df_sample_years = df['year'].dropna().sample(n=min(500000, len(df)), random_state=42)
+            available_years = sorted(df_sample_years.unique())
+        else:
+            available_years = sorted(df['year'].dropna().unique())
         # Limit default selection to prevent memory issues
         default_years = available_years if len(available_years) <= 5 else available_years[-2:]
     except Exception as e:
@@ -753,9 +758,14 @@ def main():
         default=default_years if default_years else available_years
     )
     
-    # Month filter - use dropna and optimize
+    # Month filter - optimize for large datasets
     try:
-        available_months = sorted(df['month'].dropna().unique())
+        # For very large datasets, sample first to get unique values faster
+        if len(df) > 2000000:
+            df_sample_months = df['month'].dropna().sample(n=min(500000, len(df)), random_state=42)
+            available_months = sorted(df_sample_months.unique())
+        else:
+            available_months = sorted(df['month'].dropna().unique())
         default_months = available_months if len(available_months) <= 12 else available_months
     except Exception as e:
         st.warning(f"Error getting months: {str(e)}")
@@ -768,12 +778,14 @@ def main():
         default=default_months
     )
     
-    # Country filter - use cached groupby or sample for performance
+    # Country filter - optimize for large datasets
     try:
         # For large datasets, sample first to get top countries faster
         if len(df) > 1000000:
-            # Sample 500K rows for faster groupby
-            df_sample = df.sample(n=min(500000, len(df)), random_state=42)
+            # Sample 500K rows for faster groupby (use iloc for faster sampling)
+            sample_size = min(500000, len(df))
+            sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
+            df_sample = df.loc[sample_indices]
             top_countries = df_sample.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(20).index.tolist()
         else:
             top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(20).index.tolist()
@@ -799,7 +811,18 @@ def main():
         mask = mask & df['country_description'].isin(selected_countries)
     
     # Only create filtered dataframe at the end (single copy)
-    df_filtered = df[mask].copy()
+    # Check if any filters were applied
+    filters_applied = len(selected_years) < len(available_years) or len(selected_months) < len(available_months) or len(selected_countries) > 0
+    
+    if filters_applied:
+        # Filters applied - create filtered dataframe
+        df_filtered = df[mask].copy()
+    else:
+        # No filters - use original dataframe (no copy needed)
+        # But warn if dataset is very large
+        if len(df) > 3000000:
+            st.warning(f"⚠️ Large dataset ({len(df):,} rows) loaded. Consider using filters to improve performance.")
+        df_filtered = df
     
     # Log memory usage for debugging
     try:
@@ -912,8 +935,19 @@ def show_overview(df):
     col1, col2 = st.columns(2)
     
     with col1:
-        # Top 5 countries
-        top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(5)
+        # Top 5 countries - optimize for large datasets
+        try:
+            if len(df) > 2000000:
+                # Sample for faster groupby on very large datasets
+                sample_size = min(1000000, len(df))
+                sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
+                df_sample = df.loc[sample_indices]
+                top_countries = df_sample.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(5)
+            else:
+                top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(5)
+        except Exception as e:
+            st.error(f"Error calculating top countries: {str(e)}")
+            return
         fig = px.bar(
             x=top_countries.values / 1e9,
             y=top_countries.index,
@@ -925,8 +959,19 @@ def show_overview(df):
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
-        # Top 5 commodities
-        top_commodities_df = df.groupby('commodity_description')['valuecif'].sum().sort_values(ascending=False).head(5).reset_index()
+        # Top 5 commodities - optimize for large datasets
+        try:
+            if len(df) > 2000000:
+                # Sample for faster groupby on very large datasets
+                sample_size = min(1000000, len(df))
+                sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
+                df_sample = df.loc[sample_indices]
+                top_commodities_df = df_sample.groupby('commodity_description')['valuecif'].sum().sort_values(ascending=False).head(5).reset_index()
+            else:
+                top_commodities_df = df.groupby('commodity_description')['valuecif'].sum().sort_values(ascending=False).head(5).reset_index()
+        except Exception as e:
+            st.error(f"Error calculating top commodities: {str(e)}")
+            return
         top_commodities_df['commodity_label'] = top_commodities_df['commodity_description'].apply(
             lambda x: x[:75] + '...' if len(x) > 75 else x
         )
