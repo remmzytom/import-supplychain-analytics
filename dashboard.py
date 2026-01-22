@@ -737,38 +737,76 @@ def main():
     # Sidebar filters
     st.sidebar.header("Filters")
     
-    # Year filter
-    available_years = sorted(df['year'].unique())
+    # Year filter - use dropna and optimize
+    try:
+        available_years = sorted(df['year'].dropna().unique())
+        # Limit default selection to prevent memory issues
+        default_years = available_years if len(available_years) <= 5 else available_years[-2:]
+    except Exception as e:
+        st.warning(f"Error getting years: {str(e)}")
+        available_years = []
+        default_years = []
+    
     selected_years = st.sidebar.multiselect(
         "Select Years",
         options=available_years,
-        default=available_years
+        default=default_years if default_years else available_years
     )
     
-    # Month filter
-    available_months = sorted(df['month'].unique())
+    # Month filter - use dropna and optimize
+    try:
+        available_months = sorted(df['month'].dropna().unique())
+        default_months = available_months if len(available_months) <= 12 else available_months
+    except Exception as e:
+        st.warning(f"Error getting months: {str(e)}")
+        available_months = []
+        default_months = []
+    
     selected_months = st.sidebar.multiselect(
         "Select Months",
         options=available_months,
-        default=available_months
+        default=default_months
     )
     
-    # Country filter
-    top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(20).index.tolist()
+    # Country filter - use cached groupby or sample for performance
+    try:
+        # For large datasets, sample first to get top countries faster
+        if len(df) > 1000000:
+            # Sample 500K rows for faster groupby
+            df_sample = df.sample(n=min(500000, len(df)), random_state=42)
+            top_countries = df_sample.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(20).index.tolist()
+        else:
+            top_countries = df.groupby('country_description')['valuecif'].sum().sort_values(ascending=False).head(20).index.tolist()
+    except Exception as e:
+        st.warning(f"Error getting top countries: {str(e)}")
+        top_countries = []
+    
     selected_countries = st.sidebar.multiselect(
         "Select Countries (Top 20)",
         options=top_countries,
         default=[]
     )
     
-    # Apply filters
-    df_filtered = df.copy()
+    # Apply filters using mask-based approach (memory efficient)
+    # Build boolean mask instead of copying dataframe
+    mask = pd.Series(True, index=df.index)
+    
     if selected_years:
-        df_filtered = df_filtered[df_filtered['year'].isin(selected_years)]
+        mask = mask & df['year'].isin(selected_years)
     if selected_months:
-        df_filtered = df_filtered[df_filtered['month'].isin(selected_months)]
+        mask = mask & df['month'].isin(selected_months)
     if selected_countries:
-        df_filtered = df_filtered[df_filtered['country_description'].isin(selected_countries)]
+        mask = mask & df['country_description'].isin(selected_countries)
+    
+    # Only create filtered dataframe at the end (single copy)
+    df_filtered = df[mask].copy()
+    
+    # Log memory usage for debugging
+    try:
+        memory_mb = df_filtered.memory_usage(deep=True).sum() / (1024**2)
+        st.sidebar.info(f"Filtered: {len(df_filtered):,} rows ({memory_mb:.1f} MB)")
+    except:
+        pass
     
     # Table of Contents for quick navigation
     st.markdown("---")
