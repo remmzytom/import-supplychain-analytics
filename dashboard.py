@@ -783,22 +783,43 @@ def load_data_with_fallback():
     This function handles widgets and should not be cached
     Can access st.secrets here since it's not cached
     """
-    # Priority 1: Try BigQuery first (most efficient for large datasets)
+    # Priority 1: Try GCS first (most reliable with chunked loading)
+    # BigQuery chunked loading has been unreliable, so use GCS which works
+    if GCS_AVAILABLE:
+        try:
+            # Check if GCS is configured
+            if 'gcp' in st.secrets:
+                gcp_config = st.secrets['gcp']
+                if 'bucket_name' in gcp_config and 'file_name' in gcp_config:
+                    st.info("Loading data from Google Cloud Storage...")
+                    st.info("Using efficient chunked loading to load all 4.48M rows.")
+                    
+                    gcs_data = _load_data_from_gcs_internal(show_progress=True)
+                    if gcs_data is not None and len(gcs_data) > 0:
+                        st.success(f"Loaded {len(gcs_data):,} rows from GCS!")
+                        return gcs_data
+                    else:
+                        st.warning("GCS loading returned no data. Trying other sources...")
+        except Exception as e:
+            # Continue to other sources if GCS fails
+            import traceback
+            error_details = traceback.format_exc()
+            st.warning(f"GCS loading failed: {str(e)}")
+            st.info("Falling back to local file or BigQuery...")
+            print(f"GCS error details: {error_details}", file=sys.stderr)
+    
+    # Priority 2: Try BigQuery (fallback if GCS not available)
     if BIGQUERY_AVAILABLE:
         try:
             # Check if BigQuery is configured
             if 'gcp' in st.secrets:
                 gcp_config = st.secrets['gcp']
                 if 'bigquery_dataset' in gcp_config and 'bigquery_table' in gcp_config:
-                    # Load ALL data (4.48M rows) - user requested full dataset
-                    st.info("Querying BigQuery for full dataset (4.48M rows)...")
-                    st.warning("Loading all data may take 5-15 minutes. Please be patient...")
-                    st.info("Data will be cached after first load for faster access.")
+                    st.info("Loading data from BigQuery (fallback)...")
+                    st.warning("BigQuery loading may be slower. Consider using GCS for better reliability.")
                     
-                    # Query BigQuery without filters to get all data
-                    # No row limit - load everything
-                    # Increased timeout in query_bigquery function handles long load times
-                    bigquery_data = query_bigquery(filters=None, limit_rows=None)
+                    # Try with a reasonable limit first
+                    bigquery_data = query_bigquery(filters=None, limit_rows=2000000)
                     
                     if bigquery_data is not None and len(bigquery_data) > 0:
                         st.success(f"Loaded {len(bigquery_data):,} rows from BigQuery!")
@@ -810,11 +831,10 @@ def load_data_with_fallback():
             import traceback
             error_details = traceback.format_exc()
             st.warning(f"BigQuery query failed: {str(e)}")
-            st.info("Falling back to GCS or local file...")
-            # Don't show full traceback to user, just log it
+            st.info("Falling back to local file...")
             print(f"BigQuery error details: {error_details}", file=sys.stderr)
     
-    # Priority 2: Try to load data (cached function - only checks local file)
+    # Priority 3: Try to load data (cached function - only checks local file)
     df = load_data()
     
     # If data loaded successfully, return it
