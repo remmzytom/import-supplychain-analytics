@@ -378,41 +378,64 @@ def query_bigquery(filters=None, limit_rows=None):
             if where_conditions:
                 query += " WHERE " + " AND ".join(where_conditions)
             
-            # Add LIMIT as safety net (even with filters, limit prevents extreme cases)
-            # Default limit of 2M rows for reasonable load time
-            if limit_rows is None:
-                limit_rows = 2000000  # 2M rows default
-            
-            query += f" LIMIT {limit_rows}"
+            # Add LIMIT only if specified (for full dataset, no limit)
+            if limit_rows is not None:
+                query += f" LIMIT {limit_rows}"
             
             # Execute query with timeout protection
             import time
-            import signal
             
-            st.info(f"Executing BigQuery query (this may take 1-3 minutes)...")
+            # Show different messages based on whether we're loading all data
+            if limit_rows is None or limit_rows > 3000000:
+                st.info(f"Executing BigQuery query for full dataset (4.48M rows)...")
+                st.info("This may take 5-15 minutes. BigQuery is processing and transferring data...")
+                timeout_seconds = 900  # 15 minute timeout for full dataset
+            else:
+                st.info(f"Executing BigQuery query (limit: {limit_rows:,} rows)...")
+                timeout_seconds = 300  # 5 minute timeout for limited queries
+            
             query_job = client.query(query)
             
-            # Wait for query to complete with timeout (3 minutes max)
-            timeout_seconds = 180  # 3 minute timeout
-            
             try:
-                # Poll for completion with timeout
+                # Poll for completion with timeout and progress updates
                 start_time = time.time()
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
                 while not query_job.done():
                     elapsed = time.time() - start_time
+                    elapsed_minutes = int(elapsed // 60)
+                    elapsed_seconds = int(elapsed % 60)
+                    
+                    # Update progress (estimate based on elapsed time vs timeout)
+                    if timeout_seconds > 0:
+                        progress = min(elapsed / timeout_seconds, 0.95)  # Cap at 95% until done
+                        progress_bar.progress(progress)
+                    
+                    # Update status message
+                    status_text.info(f"Query running... Elapsed: {elapsed_minutes}m {elapsed_seconds}s")
+                    
                     if elapsed > timeout_seconds:
                         query_job.cancel()
+                        progress_bar.progress(1.0)
                         raise TimeoutError(f"Query exceeded {timeout_seconds} second timeout")
-                    time.sleep(2)  # Check every 2 seconds
+                    
+                    time.sleep(3)  # Check every 3 seconds
                 
-                # Get results
+                # Query completed - get results
+                progress_bar.progress(0.98)
+                status_text.info("Query completed. Loading results into memory...")
+                
                 if query_job.errors:
                     error_msg = str(query_job.errors)
+                    progress_bar.progress(1.0)
                     st.error(f"BigQuery query error: {error_msg}")
                     return None
                 
                 df = query_job.to_dataframe()
-                st.info(f"Query completed. Loaded {len(df):,} rows.")
+                progress_bar.progress(1.0)
+                status_text.empty()
+                st.success(f"Successfully loaded {len(df):,} rows from BigQuery!")
                 
             except TimeoutError as e:
                 st.error(f"Query timeout after {timeout_seconds} seconds.")
@@ -613,17 +636,15 @@ def load_data_with_fallback():
             if 'gcp' in st.secrets:
                 gcp_config = st.secrets['gcp']
                 if 'bigquery_dataset' in gcp_config and 'bigquery_table' in gcp_config:
-                    # Load recent data by default (last 2 years) to prevent timeout
-                    # This is much faster than loading all 4.48M rows
-                    default_filters = {'year': [2024, 2025]}  # Most recent years
+                    # Load ALL data (4.48M rows) - user requested full dataset
+                    st.info("Querying BigQuery for full dataset (4.48M rows)...")
+                    st.warning("Loading all data may take 5-15 minutes. Please be patient...")
+                    st.info("Data will be cached after first load for faster access.")
                     
-                    st.info("Querying BigQuery for recent data (2024-2025)...")
-                    st.info("This loads faster. Use sidebar filters to adjust the date range or view all data.")
-                    
-                    # Query BigQuery with default filters (recent years) to prevent timeout
-                    # Users can change filters in sidebar to get different data
-                    # Set limit to 2M rows as safety net
-                    bigquery_data = query_bigquery(filters=default_filters, limit_rows=2000000)
+                    # Query BigQuery without filters to get all data
+                    # No row limit - load everything
+                    # Increased timeout in query_bigquery function handles long load times
+                    bigquery_data = query_bigquery(filters=None, limit_rows=None)
                     
                     if bigquery_data is not None and len(bigquery_data) > 0:
                         st.success(f"Loaded {len(bigquery_data):,} rows from BigQuery!")
