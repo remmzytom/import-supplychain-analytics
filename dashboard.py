@@ -1438,11 +1438,14 @@ def show_geographic_analysis(df):
     # Port Analysis
     st.subheader("Port Analysis")
     
-    # Australian Ports
-    ausport_stats = df.groupby('ausport_description').agg({
-        'valuecif': 'sum',
-        'weight': 'sum'
-    }).reset_index().sort_values('valuecif', ascending=False)
+    # Australian Ports - optimize for large datasets
+    try:
+        ausport_stats = _optimize_groupby_for_large_df(
+            df, 'ausport_description', {'valuecif': 'sum', 'weight': 'sum'}
+        ).sort_values('valuecif', ascending=False)
+    except Exception as e:
+        st.error(f"Error calculating port stats: {str(e)}")
+        return
     
     col1, col2 = st.columns(2)
     
@@ -1462,11 +1465,14 @@ def show_geographic_analysis(df):
         st.plotly_chart(fig, width='stretch')
     
     with col2:
-        # Origin Ports
-        osport_stats = df.groupby('osport_description').agg({
-            'valuecif': 'sum',
-            'weight': 'sum'
-        }).reset_index().sort_values('valuecif', ascending=False)
+        # Origin Ports - optimize for large datasets
+        try:
+            osport_stats = _optimize_groupby_for_large_df(
+                df, 'osport_description', {'valuecif': 'sum', 'weight': 'sum'}
+            ).sort_values('valuecif', ascending=False)
+        except Exception as e:
+            st.error(f"Error calculating origin port stats: {str(e)}")
+            return
         
         top_osports = osport_stats.head(15)
         fig = px.bar(
@@ -1485,9 +1491,13 @@ def show_geographic_analysis(df):
     # State Analysis
     st.subheader("Import Value by State")
     
-    state_stats = df.groupby('state').agg({
-        'valuecif': 'sum'
-    }).reset_index().sort_values('valuecif', ascending=False)
+    try:
+        state_stats = _optimize_groupby_for_large_df(
+            df, 'state', {'valuecif': 'sum'}
+        ).sort_values('valuecif', ascending=False)
+    except Exception as e:
+        st.error(f"Error calculating state stats: {str(e)}")
+        return
     
     state_stats['valuecif_pct'] = (state_stats['valuecif'] / state_stats['valuecif'].sum()) * 100
     
@@ -1514,9 +1524,13 @@ def show_geographic_analysis(df):
         (df['country_description'].isin(top_15_countries))
     ].copy()
     
-    port_country_matrix = port_country_data.groupby(['ausport_description', 'country_description']).agg({
-        'valuecif': 'sum'
-    }).reset_index()
+    try:
+        port_country_matrix = _optimize_groupby_for_large_df(
+            port_country_data, ['ausport_description', 'country_description'], {'valuecif': 'sum'}
+        )
+    except Exception as e:
+        st.error(f"Error calculating port-country matrix: {str(e)}")
+        return
     
     port_country_pivot = port_country_matrix.pivot_table(
         index='ausport_description',
@@ -1540,10 +1554,14 @@ def show_geographic_analysis(df):
     # Country Concentration and Diversity Analysis
     st.subheader("Port Concentration and Diversity Analysis")
     
-    # Create port_country_matrix for ALL ports and ALL countries (matching notebook logic)
-    port_country_matrix = df.groupby(['ausport_description', 'country_description']).agg({
-        'valuecif': 'sum'
-    }).reset_index()
+    # Create port_country_matrix for ALL ports and ALL countries (matching notebook logic) - optimize for large datasets
+    try:
+        port_country_matrix = _optimize_groupby_for_large_df(
+            df, ['ausport_description', 'country_description'], {'valuecif': 'sum'}
+        )
+    except Exception as e:
+        st.error(f"Error calculating full port-country matrix: {str(e)}")
+        return
     
     # Calculate percentage of each country for each port using transform
     port_totals = port_country_matrix.groupby('ausport_description')['valuecif'].transform('sum')
@@ -1712,10 +1730,13 @@ def show_commodity_analysis(df):
     st.subheader("SITC-Based Industry Analysis")
     
     if 'industry_sector' in df.columns:
-        sector_analysis = df.groupby('industry_sector').agg({
-            'valuecif': 'sum',
-            'weight': 'sum'
-        }).reset_index().sort_values('valuecif', ascending=False)
+        try:
+            sector_analysis = _optimize_groupby_for_large_df(
+                df, 'industry_sector', {'valuecif': 'sum', 'weight': 'sum'}
+            ).sort_values('valuecif', ascending=False)
+        except Exception as e:
+            st.error(f"Error calculating sector analysis: {str(e)}")
+            return
         
         sector_analysis['valuecif_billions'] = sector_analysis['valuecif'] / 1e9
         sector_analysis['valuecif_pct'] = (sector_analysis['valuecif'] / sector_analysis['valuecif'].sum()) * 100
@@ -1745,11 +1766,14 @@ def show_value_volume_analysis(df):
         else:
             df['industry_sector'] = "Unknown"
     
-    # Industry-level analysis
-    industry_analysis = df.groupby('industry_sector').agg({
-        'valuecif': 'sum',
-        'weight': 'sum'
-    }).reset_index()
+    # Industry-level analysis - optimize for large datasets
+    try:
+        industry_analysis = _optimize_groupby_for_large_df(
+            df, 'industry_sector', {'valuecif': 'sum', 'weight': 'sum'}
+        )
+    except Exception as e:
+        st.error(f"Error calculating industry analysis: {str(e)}")
+        return
     
     industry_analysis['value_per_tonne'] = (
         industry_analysis['valuecif'] / industry_analysis['weight'].replace(0, np.nan)
@@ -1862,9 +1886,13 @@ def show_risk_analysis(df):
     # Country Concentration Analysis
     st.subheader("Country Concentration Risk")
     
-    commodity_country_matrix = df.groupby(['commodity_description', 'country_description']).agg({
-        'valuecif': 'sum'
-    }).reset_index()
+    try:
+        commodity_country_matrix = _optimize_groupby_for_large_df(
+            df, ['commodity_description', 'country_description'], {'valuecif': 'sum'}
+        )
+    except Exception as e:
+        st.error(f"Error calculating commodity-country matrix: {str(e)}")
+        return
     
     commodity_totals = commodity_country_matrix.groupby('commodity_description')['valuecif'].sum().reset_index()
     commodity_totals.columns = ['commodity_description', 'total_value']
@@ -1954,9 +1982,13 @@ def show_risk_analysis(df):
     
     total_import_value = df['valuecif'].sum()
     
-    commodity_dependence = df.groupby('commodity_description').agg({
-        'valuecif': 'sum'
-    }).reset_index()
+    try:
+        commodity_dependence = _optimize_groupby_for_large_df(
+            df, 'commodity_description', {'valuecif': 'sum'}
+        )
+    except Exception as e:
+        st.error(f"Error calculating commodity dependence: {str(e)}")
+        return
     
     commodity_dependence['dependence_pct'] = (commodity_dependence['valuecif'] / total_import_value * 100)
     commodity_dependence['total_value_billions'] = commodity_dependence['valuecif'] / 1e9
@@ -2011,9 +2043,13 @@ def show_risk_analysis(df):
     # Supplier Trend Analysis
     st.subheader("Supplier Trend Analysis (2024 vs 2025)")
     
-    country_yearly = df.groupby(['country_description', 'year']).agg({
-        'valuecif': 'sum'
-    }).reset_index()
+    try:
+        country_yearly = _optimize_groupby_for_large_df(
+            df, ['country_description', 'year'], {'valuecif': 'sum'}
+        )
+    except Exception as e:
+        st.error(f"Error calculating country yearly stats: {str(e)}")
+        return
     
     if len(country_yearly['year'].unique()) >= 2:
         country_pivot = country_yearly.pivot_table(
