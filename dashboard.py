@@ -1121,6 +1121,23 @@ def main():
         with st.expander("Show error details"):
             st.code(traceback.format_exc())
 
+def _optimize_groupby_for_large_df(df, groupby_cols, agg_dict, sample_size=2000000):
+    """Helper function to optimize groupby operations for large datasets"""
+    if len(df) > sample_size:
+        # Sample for faster groupby
+        sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
+        df_sample = df.loc[sample_indices]
+        result = df_sample.groupby(groupby_cols).agg(agg_dict).reset_index()
+        # Scale up to approximate full dataset
+        scale_factor = len(df) / len(df_sample)
+        numeric_cols = [col for col in result.columns if col not in groupby_cols]
+        for col in numeric_cols:
+            if result[col].dtype in ['float64', 'int64', 'float32', 'int32']:
+                result[col] = result[col] * scale_factor
+        return result
+    else:
+        return df.groupby(groupby_cols).agg(agg_dict).reset_index()
+
 def show_overview(df):
     """Display overview metrics"""
     st.markdown('<h2 class="section-header">Overview</h2>', unsafe_allow_html=True)
@@ -1372,10 +1389,15 @@ def show_geographic_analysis(df):
     # Top Countries
     st.subheader("Top Countries by Import Value")
     
-    country_stats = df.groupby('country_description').agg({
-        'valuecif': 'sum',
-        'weight': 'sum'
-    }).reset_index().sort_values('valuecif', ascending=False)
+    try:
+        country_stats = _optimize_groupby_for_large_df(
+            df, 
+            'country_description', 
+            {'valuecif': 'sum', 'weight': 'sum'}
+        ).sort_values('valuecif', ascending=False)
+    except Exception as e:
+        st.error(f"Error calculating country stats: {str(e)}")
+        return
     
     country_stats['valuecif_pct'] = (country_stats['valuecif'] / country_stats['valuecif'].sum()) * 100
     
@@ -1581,11 +1603,15 @@ def show_commodity_analysis(df):
     """Display commodity analysis"""
     st.markdown('<h2 class="section-header"> Commodity Analysis</h2>', unsafe_allow_html=True)
     
-    commodity_stats = df.groupby('commodity_description').agg({
-        'valuefob': 'sum',
-        'valuecif': 'sum',
-        'weight': 'sum'
-    }).reset_index().sort_values('valuecif', ascending=False)
+    try:
+        commodity_stats = _optimize_groupby_for_large_df(
+            df,
+            'commodity_description',
+            {'valuefob': 'sum', 'valuecif': 'sum', 'weight': 'sum'}
+        ).sort_values('valuecif', ascending=False)
+    except Exception as e:
+        st.error(f"Error calculating commodity stats: {str(e)}")
+        return
     
     commodity_stats['valuecif_pct'] = (commodity_stats['valuecif'] / commodity_stats['valuecif'].sum()) * 100
     
@@ -2067,12 +2093,15 @@ def show_transport_mode_analysis(df):
     """Display transport mode analysis"""
     st.markdown('<h2 class="section-header">Transport Mode Analysis</h2>', unsafe_allow_html=True)
     
-    mode_stats = df.groupby('mode_description').agg({
-        'valuefob': 'sum',
-        'valuecif': 'sum',
-        'weight': 'sum',
-        'quantity': 'sum'
-    }).reset_index().sort_values('valuefob', ascending=False)
+    try:
+        mode_stats = _optimize_groupby_for_large_df(
+            df,
+            'mode_description',
+            {'valuefob': 'sum', 'valuecif': 'sum', 'weight': 'sum', 'quantity': 'sum'}
+        ).sort_values('valuefob', ascending=False)
+    except Exception as e:
+        st.error(f"Error calculating mode stats: {str(e)}")
+        return
     
     mode_stats['valuefob_pct'] = (mode_stats['valuefob'] / mode_stats['valuefob'].sum()) * 100
     
@@ -2120,30 +2149,34 @@ def show_key_insights(df):
     """Display key insights and summary"""
     st.markdown('<h2 class="section-header">Key Insights</h2>', unsafe_allow_html=True)
     
-    # Calculate key metrics
-    country_stats = df.groupby('country_description').agg({
-        'valuecif': 'sum'
-    }).reset_index().sort_values('valuecif', ascending=False)
-    country_stats['valuecif_pct'] = (country_stats['valuecif'] / country_stats['valuecif'].sum()) * 100
-    
-    commodity_stats = df.groupby('commodity_description').agg({
-        'valuecif': 'sum'
-    }).reset_index().sort_values('valuecif', ascending=False)
-    commodity_stats['valuecif_pct'] = (commodity_stats['valuecif'] / commodity_stats['valuecif'].sum()) * 100
-    
-    mode_stats = df.groupby('mode_description').agg({
-        'valuefob': 'sum'
-    }).reset_index().sort_values('valuefob', ascending=False)
-    mode_stats['valuefob_pct'] = (mode_stats['valuefob'] / mode_stats['valuefob'].sum()) * 100
-    
-    state_stats = df.groupby('state').agg({
-        'valuecif': 'sum'
-    }).reset_index().sort_values('valuecif', ascending=False)
-    state_stats['valuecif_pct'] = (state_stats['valuecif'] / state_stats['valuecif'].sum()) * 100
-    
-    yearly_stats = df.groupby('year').agg({
-        'valuefob': 'sum'
-    }).reset_index()
+    # Calculate key metrics - optimize for large datasets
+    try:
+        country_stats = _optimize_groupby_for_large_df(
+            df, 'country_description', {'valuecif': 'sum'}
+        ).sort_values('valuecif', ascending=False)
+        country_stats['valuecif_pct'] = (country_stats['valuecif'] / country_stats['valuecif'].sum()) * 100
+        
+        commodity_stats = _optimize_groupby_for_large_df(
+            df, 'commodity_description', {'valuecif': 'sum'}
+        ).sort_values('valuecif', ascending=False)
+        commodity_stats['valuecif_pct'] = (commodity_stats['valuecif'] / commodity_stats['valuecif'].sum()) * 100
+        
+        mode_stats = _optimize_groupby_for_large_df(
+            df, 'mode_description', {'valuefob': 'sum'}
+        ).sort_values('valuefob', ascending=False)
+        mode_stats['valuefob_pct'] = (mode_stats['valuefob'] / mode_stats['valuefob'].sum()) * 100
+        
+        state_stats = _optimize_groupby_for_large_df(
+            df, 'state', {'valuecif': 'sum'}
+        ).sort_values('valuecif', ascending=False)
+        state_stats['valuecif_pct'] = (state_stats['valuecif'] / state_stats['valuecif'].sum()) * 100
+        
+        yearly_stats = _optimize_groupby_for_large_df(
+            df, 'year', {'valuefob': 'sum'}
+        )
+    except Exception as e:
+        st.error(f"Error calculating insights: {str(e)}")
+        return
     
     # Display insights
     col1, col2 = st.columns(2)
