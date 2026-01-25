@@ -1123,20 +1123,29 @@ def main():
 
 def _optimize_groupby_for_large_df(df, groupby_cols, agg_dict, sample_size=2000000):
     """Helper function to optimize groupby operations for large datasets"""
+    if len(df) == 0:
+        return pd.DataFrame()
+    
+    # Handle list vs single column
+    if isinstance(groupby_cols, str):
+        groupby_cols_list = [groupby_cols]
+    else:
+        groupby_cols_list = groupby_cols
+    
     if len(df) > sample_size:
         # Sample for faster groupby
         sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
         df_sample = df.loc[sample_indices]
-        result = df_sample.groupby(groupby_cols).agg(agg_dict).reset_index()
+        result = df_sample.groupby(groupby_cols_list).agg(agg_dict).reset_index()
         # Scale up to approximate full dataset
         scale_factor = len(df) / len(df_sample)
-        numeric_cols = [col for col in result.columns if col not in groupby_cols]
+        numeric_cols = [col for col in result.columns if col not in groupby_cols_list]
         for col in numeric_cols:
             if result[col].dtype in ['float64', 'int64', 'float32', 'int32']:
                 result[col] = result[col] * scale_factor
         return result
     else:
-        return df.groupby(groupby_cols).agg(agg_dict).reset_index()
+        return df.groupby(groupby_cols_list).agg(agg_dict).reset_index()
 
 def show_overview(df):
     """Display overview metrics"""
