@@ -476,8 +476,9 @@ def run_automation():
         if not has_new_data:
             message = f"No new data detected. Last modified: {last_modified}"
             logger.info(message)
-            send_email_notification(success=True, message=message)
-            return True
+            # Don't send email here - let finally block handle it to avoid duplicate emails
+            success = True
+            # Continue to finally block which will send the email
         
         # Step 2: Download and merge data
         merged_df = download_and_merge_data()
