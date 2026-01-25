@@ -49,6 +49,9 @@ _smtp_server = os.getenv('SMTP_SERVER', '').strip()
 SMTP_SERVER = _smtp_server if _smtp_server else 'smtp.gmail.com'
 SMTP_PORT = int(os.getenv('SMTP_PORT') or '587')  # Handle empty string
 
+# Dashboard URL (from environment variable, with default)
+DASHBOARD_URL = os.getenv('DASHBOARD_URL', 'https://import-supplychain-analytics.streamlit.app')
+
 # Logging setup
 log_file = Path('automation.log')
 logging.basicConfig(
@@ -410,6 +413,8 @@ Freight Import Data Pipeline Automation Report
 {message}
 
 ---
+📊 View Dashboard: {DASHBOARD_URL}
+
 This is an automated message from the Freight Import Data Pipeline.
 You are receiving this because EMAIL_TO is configured in GitHub Secrets.
         """

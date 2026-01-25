@@ -41,6 +41,7 @@ jobs:
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
         SMTP_PORT: ${{ secrets.SMTP_PORT || '587' }}
+        DASHBOARD_URL: ${{ secrets.DASHBOARD_URL || 'https://import-supplychain-analytics.streamlit.app' }}
       run: |
         python automation.py
     
