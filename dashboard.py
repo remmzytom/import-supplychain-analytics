@@ -1216,13 +1216,33 @@ def show_time_series(df):
     """Display time series analysis"""
     st.markdown('<h2 class="section-header">Time Series Analysis</h2>', unsafe_allow_html=True)
     
-    # Monthly trends
-    monthly_stats = df.groupby(['year', 'month_number', 'month']).agg({
-        'valuefob': 'sum',
-        'valuecif': 'sum',
-        'weight': 'sum',
-        'quantity': 'sum'
-    }).reset_index()
+    # Monthly trends - optimize for large datasets
+    try:
+        if len(df) > 2000000:
+            # Sample for faster groupby on very large datasets
+            sample_size = min(2000000, len(df))
+            sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
+            df_sample = df.loc[sample_indices]
+            monthly_stats = df_sample.groupby(['year', 'month_number', 'month']).agg({
+                'valuefob': 'sum',
+                'valuecif': 'sum',
+                'weight': 'sum',
+                'quantity': 'sum'
+            }).reset_index()
+            # Scale up the sums to approximate full dataset (if sampling)
+            scale_factor = len(df) / len(df_sample)
+            for col in ['valuefob', 'valuecif', 'weight', 'quantity']:
+                monthly_stats[col] = monthly_stats[col] * scale_factor
+        else:
+            monthly_stats = df.groupby(['year', 'month_number', 'month']).agg({
+                'valuefob': 'sum',
+                'valuecif': 'sum',
+                'weight': 'sum',
+                'quantity': 'sum'
+            }).reset_index()
+    except Exception as e:
+        st.error(f"Error calculating time series: {str(e)}")
+        return
     
     monthly_stats = monthly_stats.sort_values(['year', 'month_number'])
     monthly_stats['date'] = pd.to_datetime(
@@ -1275,15 +1295,35 @@ def show_time_series(df):
     fig.update_layout(height=800, showlegend=False, title_text="Monthly Import Trends")
     st.plotly_chart(fig, width='stretch')
     
-    # Year-over-Year comparison
+    # Year-over-Year comparison - optimize for large datasets
     st.subheader("Year-over-Year Comparison")
     
-    yearly_stats = df.groupby('year').agg({
-        'valuefob': 'sum',
-        'valuecif': 'sum',
-        'weight': 'sum',
-        'quantity': 'sum'
-    }).reset_index()
+    try:
+        if len(df) > 2000000:
+            # Sample for faster groupby
+            sample_size = min(2000000, len(df))
+            sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
+            df_sample = df.loc[sample_indices]
+            yearly_stats = df_sample.groupby('year').agg({
+                'valuefob': 'sum',
+                'valuecif': 'sum',
+                'weight': 'sum',
+                'quantity': 'sum'
+            }).reset_index()
+            # Scale up to approximate full dataset
+            scale_factor = len(df) / len(df_sample)
+            for col in ['valuefob', 'valuecif', 'weight', 'quantity']:
+                yearly_stats[col] = yearly_stats[col] * scale_factor
+        else:
+            yearly_stats = df.groupby('year').agg({
+                'valuefob': 'sum',
+                'valuecif': 'sum',
+                'weight': 'sum',
+                'quantity': 'sum'
+            }).reset_index()
+    except Exception as e:
+        st.error(f"Error calculating yearly stats: {str(e)}")
+        return
     
     if len(yearly_stats) > 1:
         col1, col2 = st.columns(2)
