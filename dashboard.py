@@ -1025,52 +1025,101 @@ def main():
     st.markdown("---")
     
     # Display all sections on the same page
+    # Wrap each section in try-except to prevent crashes
     
     # 1. Overview Section
-    st.markdown('<div id="overview"></div>', unsafe_allow_html=True)
-    show_overview(df_filtered)
+    try:
+        st.markdown('<div id="overview"></div>', unsafe_allow_html=True)
+        show_overview(df_filtered)
+    except Exception as e:
+        st.error(f"Error displaying Overview section: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
     
     st.markdown("---")
     
     # 2. Time Series Analysis Section
-    st.markdown('<div id="time-series"></div>', unsafe_allow_html=True)
-    show_time_series(df_filtered)
+    try:
+        st.markdown('<div id="time-series"></div>', unsafe_allow_html=True)
+        show_time_series(df_filtered)
+    except Exception as e:
+        st.error(f"Error displaying Time Series section: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
     
     st.markdown("---")
     
     # 3. Geographic Analysis Section
-    st.markdown('<div id="geographic"></div>', unsafe_allow_html=True)
-    show_geographic_analysis(df_filtered)
+    try:
+        st.markdown('<div id="geographic"></div>', unsafe_allow_html=True)
+        show_geographic_analysis(df_filtered)
+    except Exception as e:
+        st.error(f"Error displaying Geographic Analysis section: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
     
     st.markdown("---")
     
     # 4. Commodity Analysis Section
-    st.markdown('<div id="commodity"></div>', unsafe_allow_html=True)
-    show_commodity_analysis(df_filtered)
+    try:
+        st.markdown('<div id="commodity"></div>', unsafe_allow_html=True)
+        show_commodity_analysis(df_filtered)
+    except Exception as e:
+        st.error(f"Error displaying Commodity Analysis section: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
     
     st.markdown("---")
     
     # 5. Value vs Volume Analysis Section
-    st.markdown('<div id="value-volume"></div>', unsafe_allow_html=True)
-    show_value_volume_analysis(df_filtered)
+    try:
+        st.markdown('<div id="value-volume"></div>', unsafe_allow_html=True)
+        show_value_volume_analysis(df_filtered)
+    except Exception as e:
+        st.error(f"Error displaying Value vs Volume Analysis section: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
     
     st.markdown("---")
     
     # 6. Risk Analysis Section
-    st.markdown('<div id="risk"></div>', unsafe_allow_html=True)
-    show_risk_analysis(df_filtered)
+    try:
+        st.markdown('<div id="risk"></div>', unsafe_allow_html=True)
+        show_risk_analysis(df_filtered)
+    except Exception as e:
+        st.error(f"Error displaying Risk Analysis section: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
     
     st.markdown("---")
     
     # 7. Transport Mode Analysis Section
-    st.markdown('<div id="transport"></div>', unsafe_allow_html=True)
-    show_transport_mode_analysis(df_filtered)
+    try:
+        st.markdown('<div id="transport"></div>', unsafe_allow_html=True)
+        show_transport_mode_analysis(df_filtered)
+    except Exception as e:
+        st.error(f"Error displaying Transport Mode Analysis section: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
     
     st.markdown("---")
     
     # 8. Key Insights Section
-    st.markdown('<div id="insights"></div>', unsafe_allow_html=True)
-    show_key_insights(df_filtered)
+    try:
+        st.markdown('<div id="insights"></div>', unsafe_allow_html=True)
+        show_key_insights(df_filtered)
+    except Exception as e:
+        st.error(f"Error displaying Key Insights section: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
 
 def show_overview(df):
     """Display overview metrics"""
@@ -1127,7 +1176,7 @@ def show_overview(df):
             labels={'x': 'Value (Billions AUD)', 'y': 'Country'}
         )
         fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     with col2:
         # Top 5 commodities - optimize for large datasets
@@ -1161,7 +1210,7 @@ def show_overview(df):
         fig.update_traces(hovertemplate='<b>%{customdata[0]}</b><br>Value: %{x:.2f} Billion AUD<extra></extra>',
                           customdata=top_commodities_df[['commodity_description']].values)
         fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
 def show_time_series(df):
     """Display time series analysis"""
@@ -1224,7 +1273,7 @@ def show_time_series(df):
     fig.update_yaxes(title_text="Quantity (Millions)", row=2, col=2)
     
     fig.update_layout(height=800, showlegend=False, title_text="Monthly Import Trends")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Year-over-Year comparison
     st.subheader("Year-over-Year Comparison")
@@ -1250,7 +1299,7 @@ def show_time_series(df):
                 color_discrete_map={'valuefob': '#1f77b4', 'valuecif': 'orange'}
             )
             fig.update_layout(yaxis_title="Value (AUD)")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with col2:
             # Growth rates
@@ -1274,7 +1323,7 @@ def show_time_series(df):
                     color='Growth Rate (%)',
                     color_continuous_scale='RdYlGn'
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
 
 def show_geographic_analysis(df):
     """Display geographic analysis"""
@@ -1307,7 +1356,7 @@ def show_geographic_analysis(df):
             color_continuous_scale='Blues'
         )
         fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=600)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     with col2:
         top_countries_weight = country_stats.nlargest(top_n, 'weight')
@@ -1322,7 +1371,7 @@ def show_geographic_analysis(df):
             color_continuous_scale='Oranges'
         )
         fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=600)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     # Port Analysis
     st.subheader("Port Analysis")
@@ -1348,7 +1397,7 @@ def show_geographic_analysis(df):
             color_continuous_scale='Purples'
         )
         fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=500)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     with col2:
         # Origin Ports
@@ -1369,7 +1418,7 @@ def show_geographic_analysis(df):
             color_continuous_scale='Greens'
         )
         fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=500)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     # State Analysis
     st.subheader("Import Value by State")
@@ -1390,7 +1439,7 @@ def show_geographic_analysis(df):
         color_continuous_scale='Viridis'
     )
     fig.update_xaxes(tickangle=45)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Port-Country Matrix
     st.subheader("Port-Country Matrix")
@@ -1424,7 +1473,7 @@ def show_geographic_analysis(df):
         title="Port-Country Matrix: Import Value Heatmap"
     )
     fig.update_layout(height=600)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Country Concentration and Diversity Analysis
     st.subheader("Port Concentration and Diversity Analysis")
@@ -1469,7 +1518,7 @@ def show_geographic_analysis(df):
         )
         fig.update_traces(textposition='outside')
         fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=500)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     with col2:
         # Country Diversity Chart
@@ -1486,7 +1535,7 @@ def show_geographic_analysis(df):
         )
         fig.update_traces(textposition='outside')
         fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=500)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
 def show_commodity_analysis(df):
     """Display commodity analysis"""
@@ -1525,7 +1574,7 @@ def show_commodity_analysis(df):
     fig.update_traces(hovertemplate='<b>%{customdata[0]}</b><br>Value: %{x:.2f} Billion AUD<br>Percentage: %{customdata[1]:.2f}%<extra></extra>',
                       customdata=top_commodities[['commodity_description', 'valuecif_pct']].values)
     fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=600)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Top commodities by weight
     st.subheader("Top Commodities by Weight")
@@ -1553,7 +1602,7 @@ def show_commodity_analysis(df):
     fig.update_traces(hovertemplate='<b>%{customdata[0]}</b><br>Weight: %{x:.2f} Million Tonnes<br>Value: %{customdata[1]:.2f} Billion AUD<extra></extra>',
                       customdata=hover_customdata)
     fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=600)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # CIF vs FOB Comparison
     st.subheader("CIF vs FOB Comparison for Top Commodities")
@@ -1591,7 +1640,7 @@ def show_commodity_analysis(df):
         height=500,
         xaxis=dict(tickangle=45)
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # SITC Industry Analysis
     st.subheader("SITC-Based Industry Analysis")
@@ -1618,7 +1667,7 @@ def show_commodity_analysis(df):
         )
         fig.update_traces(textposition='outside')
         fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=600)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
 def show_value_volume_analysis(df):
     """Display value vs volume analysis"""
@@ -1690,7 +1739,7 @@ def show_value_volume_analysis(df):
                       annotation_text=f"Volume Threshold: ${volume_threshold:.2f}B")
         
         fig.update_layout(height=700)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     else:
         st.warning("No industry data available for visualization.")
     
@@ -1713,7 +1762,7 @@ def show_value_volume_analysis(df):
             color_continuous_scale='Blues'
         )
         fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=500)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     else:
         st.info("No market leaders found in the filtered data.")
     
@@ -1736,7 +1785,7 @@ def show_value_volume_analysis(df):
             color_continuous_scale='YlOrBr'
         )
         fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     else:
         st.info("No premium products found in the filtered data.")
 
@@ -1801,7 +1850,7 @@ def show_risk_analysis(df):
                 'LOW RISK': 'green'
             }
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     with col2:
         # Top high-risk commodities
@@ -1830,7 +1879,7 @@ def show_risk_analysis(df):
             fig.add_vline(x=2500, line_dash="dash", line_color="red", 
                          annotation_text="High Risk Threshold")
             fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=500)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         else:
             st.info("No high-risk commodities found with value >= $1B.")
     
@@ -1889,7 +1938,7 @@ def show_risk_analysis(df):
         fig.add_vline(x=5, line_dash="dash", line_color="darkred", annotation_text="Critical (5%)")
         fig.add_vline(x=2, line_dash="dash", line_color="orange", annotation_text="High (2%)")
         fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=600)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     else:
         st.info("No critical or high dependence commodities found.")
     
@@ -1953,7 +2002,7 @@ def show_risk_analysis(df):
                             color_continuous_scale='Reds'
                         )
                         fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=500)
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width='stretch')
                     else:
                         st.info("No declining suppliers found.")
                 
@@ -1970,7 +2019,7 @@ def show_risk_analysis(df):
                             color_continuous_scale='Greens'
                         )
                         fig.update_layout(yaxis={'categoryorder': 'total ascending'}, height=500)
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width='stretch')
                     else:
                         st.info("No growing suppliers found.")
 
@@ -2000,7 +2049,7 @@ def show_transport_mode_analysis(df):
             color_continuous_scale='Blues'
         )
         fig.update_xaxes(tickangle=45)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     with col2:
         fig = px.pie(
@@ -2010,7 +2059,7 @@ def show_transport_mode_analysis(df):
             title="Transport Mode Distribution",
             color_discrete_sequence=px.colors.qualitative.Set3
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     
     # Mode by weight
     st.subheader("Transport Mode by Weight")
@@ -2025,7 +2074,7 @@ def show_transport_mode_analysis(df):
         color_continuous_scale='Oranges'
     )
     fig.update_xaxes(tickangle=45)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 def show_key_insights(df):
     """Display key insights and summary"""
