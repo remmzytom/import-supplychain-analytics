@@ -44,7 +44,9 @@ CHECK_INTERVAL_DAYS = 7  # Check weekly
 EMAIL_FROM = os.getenv('EMAIL_FROM')
 EMAIL_TO = os.getenv('EMAIL_TO')
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')  # App password for Gmail
-SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+# Handle empty string - if SMTP_SERVER is empty or not set, use default
+_smtp_server = os.getenv('SMTP_SERVER', '').strip()
+SMTP_SERVER = _smtp_server if _smtp_server else 'smtp.gmail.com'
 SMTP_PORT = int(os.getenv('SMTP_PORT') or '587')  # Handle empty string
 
 # Logging setup
