@@ -182,10 +182,13 @@ def check_for_new_data():
         raise
 
 
-def download_and_merge_data():
+def download_and_merge_data(skip_existing_if_incomplete=False):
     """
     Download new data and merge with existing data
     Strategy: Append new data to existing (keep full history)
+    
+    Args:
+        skip_existing_if_incomplete: If True, skip loading existing data if it appears incomplete
     """
     try:
         logger.info("Downloading new data from ABS...")
@@ -199,34 +202,45 @@ def download_and_merge_data():
         
         logger.info(f"Downloaded {len(new_df):,} new records")
         
-        # Try to load existing data from GCS
+        # Try to load existing data from GCS (unless we're skipping incomplete files)
         existing_df = None
-        try:
-            # Check if credentials file exists (from GitHub Actions)
-            creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-            if creds_path and os.path.exists(creds_path):
-                client = storage.Client.from_service_account_json(creds_path)
-            else:
-                client = storage.Client()
-            
-            # Clean bucket name
-            bucket_name = GCS_BUCKET_NAME.strip('"').strip("'").strip()
-            logger.info(f"Loading from GCS bucket: '{bucket_name}'")
-            bucket = client.bucket(bucket_name)
-            blob = bucket.blob(GCS_FILE_NAME)
-            
-            if blob.exists():
-                logger.info("Loading existing data from GCS...")
-                with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
-                    blob.download_to_filename(tmp_file.name)
-                    existing_df = pd.read_csv(tmp_file.name, low_memory=False)
-                    logger.info(f"Loaded {len(existing_df):,} existing records")
-                    os.unlink(tmp_file.name)
-        except Exception as e:
-            logger.warning(f"Could not load existing data: {e}. Starting fresh.")
+        if not skip_existing_if_incomplete:
+            try:
+                # Check if credentials file exists (from GitHub Actions)
+                creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+                if creds_path and os.path.exists(creds_path):
+                    client = storage.Client.from_service_account_json(creds_path)
+                else:
+                    client = storage.Client()
+                
+                # Clean bucket name
+                bucket_name = GCS_BUCKET_NAME.strip('"').strip("'").strip()
+                logger.info(f"Loading from GCS bucket: '{bucket_name}'")
+                bucket = client.bucket(bucket_name)
+                blob = bucket.blob(GCS_FILE_NAME)
+                
+                if blob.exists():
+                    # Check if file is complete before loading
+                    file_size_mb = blob.size / (1024 * 1024) if blob.size else 0
+                    estimated_rows = int(file_size_mb * 1024 * 1024 / 200) if file_size_mb > 0 else 0
+                    
+                    if estimated_rows < 3000000:
+                        logger.warning(f"GCS file appears incomplete ({estimated_rows:,} rows estimated). Skipping merge, using full downloaded dataset.")
+                        existing_df = None
+                    else:
+                        logger.info("Loading existing data from GCS...")
+                        with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
+                            blob.download_to_filename(tmp_file.name)
+                            existing_df = pd.read_csv(tmp_file.name, low_memory=False)
+                            logger.info(f"Loaded {len(existing_df):,} existing records")
+                            os.unlink(tmp_file.name)
+            except Exception as e:
+                logger.warning(f"Could not load existing data: {e}. Starting fresh.")
+        else:
+            logger.info("Skipping existing data load (incomplete file detected).")
         
         # Merge data: Append new to existing (keep full history)
-        if existing_df is not None:
+        if existing_df is not None and len(existing_df) > 0:
             # Remove duplicates based on key columns (if any)
             # Combine both dataframes
             combined_df = pd.concat([existing_df, new_df], ignore_index=True)
@@ -244,7 +258,7 @@ def download_and_merge_data():
             logger.info(f"Merged data: {len(existing_df):,} existing + {len(new_df):,} new = {len(combined_df):,} total")
             return combined_df
         else:
-            logger.info("No existing data found. Using new data only.")
+            logger.info("No existing data found or skipped. Using new data only (full dataset).")
             return new_df
             
     except Exception as e:
@@ -478,17 +492,67 @@ def run_automation():
         # Step 1: Check for new data
         has_new_data, last_modified, latest_data_date = check_for_new_data()
         
-        if not has_new_data:
-            message = f"No new data detected. Last modified: {last_modified}"
-            logger.info(message)
-            # Don't send email here - let finally block handle it to avoid duplicate emails
-            success = True
-            # Continue to finally block which will send the email
+        # Step 1.5: Check if GCS file has full dataset (4.48M rows)
+        # If file exists but is incomplete, we should re-upload the full dataset
+        gcs_file_complete = False
+        gcs_row_count = 0
+        try:
+            creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            if creds_path and os.path.exists(creds_path):
+                client = storage.Client.from_service_account_json(creds_path)
+            else:
+                client = storage.Client()
+            
+            bucket = client.bucket(GCS_BUCKET_NAME)
+            blob = bucket.blob(GCS_FILE_NAME)
+            
+            if blob.exists():
+                # Check file size - if it's too small, it's incomplete
+                file_size_mb = blob.size / (1024 * 1024) if blob.size else 0
+                logger.info(f"GCS file exists. Size: {file_size_mb:.2f} MB")
+                
+                # Estimate rows from file size (rough estimate: ~200 bytes per row)
+                estimated_rows = int(file_size_mb * 1024 * 1024 / 200) if file_size_mb > 0 else 0
+                logger.info(f"Estimated rows in GCS file: {estimated_rows:,}")
+                
+                # If file is too small (< 3M rows estimated), consider it incomplete
+                if estimated_rows < 3000000:
+                    logger.warning(f"GCS file appears incomplete ({estimated_rows:,} rows estimated). Will re-upload full dataset.")
+                    gcs_file_complete = False
+                else:
+                    gcs_file_complete = True
+                    logger.info("GCS file appears to have full dataset.")
+            else:
+                logger.info("GCS file does not exist. Will upload full dataset.")
+        except Exception as gcs_check_error:
+            logger.warning(f"Could not check GCS file completeness: {gcs_check_error}")
+            gcs_file_complete = False  # Assume incomplete, will re-upload
         
-        # Step 2: Download and merge data
-        merged_df = download_and_merge_data()
-        if merged_df is None:
-            raise Exception("Failed to download/merge data")
+        # If no new data AND file is complete, skip processing
+        if not has_new_data and gcs_file_complete:
+            message = f"No new data detected. Last modified: {last_modified}. GCS file is complete."
+            logger.info(message)
+            success = True
+            # Will send email in finally block
+        else:
+            # Either new data exists OR GCS file is incomplete - process full dataset
+            if not has_new_data:
+                logger.info("No new data detected, but GCS file is incomplete. Re-uploading full dataset...")
+            
+            # Step 2: Download and merge data
+            # If GCS file is incomplete, skip loading it and use full downloaded dataset
+            skip_existing = not gcs_file_complete
+            merged_df = download_and_merge_data(skip_existing_if_incomplete=skip_existing)
+            if merged_df is None:
+                raise Exception("Failed to download/merge data")
+            
+            logger.info(f"Total records to process: {len(merged_df):,}")
+            
+            # Verify we have the full dataset
+            if len(merged_df) < 4000000:
+                logger.warning(f"Dataset appears incomplete: {len(merged_df):,} rows (expected ~4.48M). This may be normal if data source has less data.")
+            else:
+                logger.info(f"Full dataset confirmed: {len(merged_df):,} rows")
         
         # Step 3: Save merged data temporarily
         DATA_DIR.mkdir(exist_ok=True)
