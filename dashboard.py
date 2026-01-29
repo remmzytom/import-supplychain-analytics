@@ -195,11 +195,18 @@ def _load_data_from_gcs_internal(show_progress=False):
             json.dump(credentials_dict, creds_file)
             creds_path = creds_file.name
         
-        tmp_path = None
         try:
             # Initialize GCS client with credentials
+            if show_progress:
+                st.info(f"Authenticating with Google Cloud Storage...")
             client = storage.Client.from_service_account_json(creds_path)
+            
+            if show_progress:
+                st.info(f"Accessing bucket: `{bucket_name}`")
             bucket = client.bucket(bucket_name)
+            
+            if show_progress:
+                st.info(f"Looking for file: `{file_name}`")
             blob = bucket.blob(file_name)
             
             # Check if file exists
@@ -214,32 +221,60 @@ def _load_data_from_gcs_internal(show_progress=False):
                     """)
                 return None
             
+            # Show loading progress
+            file_size = blob.size
+            if show_progress:
+                if file_size is not None:
+                    st.info(f"File size: {file_size / (1024*1024):.2f} MB")
+                else:
+                    st.info("File size: Unknown")
+            
             # Download to temporary file
+            if show_progress:
+                progress_bar = st.progress(0)
+                st.info(f"Downloading `{file_name}` from Google Cloud Storage...")
+            
             with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
                 blob.download_to_filename(tmp_file.name)
                 tmp_path = tmp_file.name
             
+            if show_progress:
+                progress_bar.progress(100)
+                st.success("File downloaded successfully!")
+            
             # Load data from temporary file
+            # Use a row limit on Streamlit Cloud to avoid OOM
             max_rows = _get_max_rows_limit()
+            if show_progress:
+                if max_rows:
+                    st.info(f"Row limit enabled: {max_rows:,} rows")
+                st.info("Loading data into memory using chunked reading...")
+                st.info("This will load all 4.48M rows efficiently in chunks.")
+            
+            # Load all data (no limit) - chunked loading handles memory efficiently
             df = load_data_from_file(tmp_path, max_rows=max_rows)
             
             if df is None:
+                # Error already displayed in load_data_from_file
                 return None
+            
+            if show_progress:
+                st.success(f"Data loaded successfully! ({len(df):,} rows)")
+                # Show memory usage
+                try:
+                    memory_mb = df.memory_usage(deep=True).sum() / (1024**2)
+                    st.info(f"Memory usage: {memory_mb:.2f} MB")
+                except:
+                    pass
             
             return df
         finally:
             # Clean up credentials file
             if os.path.exists(creds_path):
-                try:
-                    os.unlink(creds_path)
-                except Exception:
-                    pass
+                os.unlink(creds_path)
             # Clean up data file after loading
-            if tmp_path and os.path.exists(tmp_path):
-                try:
-                    os.unlink(tmp_path)
-                except Exception:
-                    pass
+            if 'tmp_path' in locals() and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
                 
     except Exception as e:
         if show_progress:
@@ -378,31 +413,49 @@ def query_bigquery(filters=None, limit_rows=None):
             # Execute query with timeout protection
             import time
             
-            # Set timeout based on query size
+            # Show different messages based on whether we're loading all data
             if limit_rows is None or limit_rows > 3000000:
+                st.info(f"Executing BigQuery query for full dataset (4.48M rows)...")
+                st.info("This may take 5-15 minutes. BigQuery is processing and transferring data...")
                 timeout_seconds = 900  # 15 minute timeout for full dataset
             else:
+                st.info(f"Executing BigQuery query (limit: {limit_rows:,} rows)...")
                 timeout_seconds = 300  # 5 minute timeout for limited queries
             
             query_job = client.query(query)
             
             try:
-                # Poll for completion with timeout
+                # Poll for completion with timeout and progress updates
                 start_time = time.time()
+                progress_bar = st.progress(0)
+                status_text = st.empty()
                 
                 while not query_job.done():
                     elapsed = time.time() - start_time
+                    elapsed_minutes = int(elapsed // 60)
+                    elapsed_seconds = int(elapsed % 60)
+                    
+                    # Update progress (estimate based on elapsed time vs timeout)
+                    if timeout_seconds > 0:
+                        progress = min(elapsed / timeout_seconds, 0.95)  # Cap at 95% until done
+                        progress_bar.progress(progress)
+                    
+                    # Update status message
+                    status_text.info(f"Query running... Elapsed: {elapsed_minutes}m {elapsed_seconds}s")
                     
                     if elapsed > timeout_seconds:
                         query_job.cancel()
+                        progress_bar.progress(1.0)
                         raise TimeoutError(f"Query exceeded {timeout_seconds} second timeout")
                     
                     time.sleep(3)  # Check every 3 seconds
                 
                 # Query completed - get results in chunks to avoid memory issues
+                progress_bar.progress(0.98)
                 
                 if query_job.errors:
                     error_msg = str(query_job.errors)
+                    progress_bar.progress(1.0)
                     st.error(f"BigQuery query error: {error_msg}")
                     return None
                 
@@ -411,6 +464,10 @@ def query_bigquery(filters=None, limit_rows=None):
                 chunk_size = 100000  # 100K rows per chunk (much safer)
                 all_chunks = []
                 total_rows_loaded = 0
+                
+                # Load data in chunks using multiple queries with LIMIT/OFFSET
+                # Need ORDER BY for consistent pagination
+                status_text.info("Loading data in chunks (100K rows each) to prevent memory issues...")
                 
                 # Check if query already has ORDER BY
                 query_lower = query.lower()
@@ -435,6 +492,8 @@ def query_bigquery(filters=None, limit_rows=None):
                         
                         # Build chunk query
                         chunk_query = paginated_query + f" LIMIT {chunk_size} OFFSET {offset}"
+                        
+                        status_text.info(f"Loading chunk {chunk_num} (500K rows each)... Offset: {offset:,}")
                         
                         # Execute chunk query
                         chunk_job = client.query(chunk_query)
@@ -491,6 +550,11 @@ def query_bigquery(filters=None, limit_rows=None):
                         all_chunks.append(df_chunk)
                         total_rows_loaded += len(df_chunk)
                         
+                        # Update progress
+                        progress = min(0.98, chunk_num / max_chunks)
+                        progress_bar.progress(progress)
+                        status_text.info(f"Loaded chunk {chunk_num}: {len(df_chunk):,} rows (Total: {total_rows_loaded:,})")
+                        
                         # If chunk is smaller than chunk_size, we've reached the end
                         if len(df_chunk) < chunk_size:
                             break
@@ -518,6 +582,8 @@ def query_bigquery(filters=None, limit_rows=None):
                     st.error("No data loaded from BigQuery")
                     return None
                 
+                status_text.info(f"Combining {len(all_chunks)} chunks...")
+                
                 # If we only have a few chunks, combine all at once
                 if len(all_chunks) <= 5:
                     df = pd.concat(all_chunks, ignore_index=True)
@@ -537,6 +603,7 @@ def query_bigquery(filters=None, limit_rows=None):
                         # Free memory after each batch
                         import gc
                         gc.collect()
+                        status_text.info(f"Combined {min(i+batch_size, len(all_chunks))}/{len(all_chunks)} chunks...")
                 
                 # Final cleanup
                 del all_chunks
@@ -547,6 +614,10 @@ def query_bigquery(filters=None, limit_rows=None):
                 if df is None or len(df) == 0:
                     st.error("Failed to combine chunks - empty dataframe")
                     return None
+                
+                progress_bar.progress(1.0)
+                status_text.empty()
+                st.success(f"Successfully loaded {len(df):,} rows from BigQuery in {chunk_num} chunks!")
                 
             except TimeoutError as e:
                 st.error(f"Query timeout after {timeout_seconds} seconds.")
@@ -734,13 +805,24 @@ def load_data_with_fallback():
             if 'gcp' in st.secrets:
                 gcp_config = st.secrets['gcp']
                 if 'bucket_name' in gcp_config and 'file_name' in gcp_config:
-                    gcs_data = _load_data_from_gcs_internal(show_progress=False)
+                    st.info("Loading data from Google Cloud Storage...")
+                    max_rows = _get_max_rows_limit()
+                    if max_rows:
+                        st.info(f"Row limit enabled: {max_rows:,} rows")
+                    st.info("Using efficient chunked loading to load data.")
+                    
+                    gcs_data = _load_data_from_gcs_internal(show_progress=True)
                     if gcs_data is not None and len(gcs_data) > 0:
+                        st.success(f"Loaded {len(gcs_data):,} rows from GCS!")
                         return gcs_data
+                    else:
+                        st.warning("GCS loading returned no data. Trying other sources...")
         except Exception as e:
             # Continue to other sources if GCS fails
             import traceback
             error_details = traceback.format_exc()
+            st.warning(f"GCS loading failed: {str(e)}")
+            st.info("Falling back to local file or BigQuery...")
             print(f"GCS error details: {error_details}", file=sys.stderr)
     
     # Priority 2: Try BigQuery (fallback if GCS not available)
@@ -750,15 +832,23 @@ def load_data_with_fallback():
             if 'gcp' in st.secrets:
                 gcp_config = st.secrets['gcp']
                 if 'bigquery_dataset' in gcp_config and 'bigquery_table' in gcp_config:
+                    st.info("Loading data from BigQuery (fallback)...")
+                    st.warning("BigQuery loading may be slower. Consider using GCS for better reliability.")
+                    
                     # Try with a reasonable limit first
                     bigquery_data = query_bigquery(filters=None, limit_rows=2000000)
                     
                     if bigquery_data is not None and len(bigquery_data) > 0:
+                        st.success(f"Loaded {len(bigquery_data):,} rows from BigQuery!")
                         return bigquery_data
+                    else:
+                        st.warning("BigQuery query returned no data. Trying other sources...")
         except Exception as e:
             # Continue to other sources if BigQuery fails
             import traceback
             error_details = traceback.format_exc()
+            st.warning(f"BigQuery query failed: {str(e)}")
+            st.info("Falling back to local file...")
             print(f"BigQuery error details: {error_details}", file=sys.stderr)
     
     # Priority 3: Try to load data (cached function - only checks local file)
@@ -926,6 +1016,9 @@ def main():
         df_filtered = df[mask].copy()
     else:
         # No filters - use original dataframe (no copy needed)
+        # But warn if dataset is very large
+        if len(df) > 3000000:
+            st.warning(f"⚠️ Large dataset ({len(df):,} rows) loaded. Consider using filters to improve performance.")
         df_filtered = df
     
     # Log memory usage for debugging
