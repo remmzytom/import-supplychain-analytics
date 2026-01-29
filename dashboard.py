@@ -1196,14 +1196,30 @@ def show_overview(df):
     col1, col2, col3, col4 = st.columns(4)
     
     # Use optimized aggregation for large datasets
-    if len(df) > 2000000:
+    if len(df) == 0:
+        total_fob = 0
+        total_cif = 0
+        total_weight = 0
+    elif len(df) > 2000000:
         # Sample for faster calculations
         sample_size = min(1000000, len(df))
-        sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
-        df_sample = df.loc[sample_indices]
-        total_fob = df_sample['valuefob'].sum() * (len(df) / len(df_sample))
-        total_cif = df_sample['valuecif'].sum() * (len(df) / len(df_sample))
-        total_weight = df_sample['weight'].sum() * (len(df) / len(df_sample))
+        try:
+            sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
+            df_sample = df.loc[sample_indices]
+            if len(df_sample) > 0:
+                scale_factor = len(df) / len(df_sample)
+                total_fob = df_sample['valuefob'].sum() * scale_factor
+                total_cif = df_sample['valuecif'].sum() * scale_factor
+                total_weight = df_sample['weight'].sum() * scale_factor
+            else:
+                total_fob = df['valuefob'].sum()
+                total_cif = df['valuecif'].sum()
+                total_weight = df['weight'].sum()
+        except Exception:
+            # Fallback to direct sum if sampling fails
+            total_fob = df['valuefob'].sum()
+            total_cif = df['valuecif'].sum()
+            total_weight = df['weight'].sum()
     else:
         total_fob = df['valuefob'].sum()
         total_cif = df['valuecif'].sum()
@@ -1226,18 +1242,32 @@ def show_overview(df):
     st.markdown("---")
     
     # Year range - optimize for large datasets
-    if len(df) > 2000000:
+    if len(df) == 0:
+        year_range = "N/A"
+    elif len(df) > 2000000:
         # Sample for min/max
-        sample_size = min(500000, len(df))
-        sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
-        df_sample = df.loc[sample_indices]
-        year_min = df_sample['year'].min()
-        year_max = df_sample['year'].max()
+        try:
+            sample_size = min(500000, len(df))
+            sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
+            df_sample = df.loc[sample_indices]
+            if len(df_sample) > 0:
+                year_min = df_sample['year'].min()
+                year_max = df_sample['year'].max()
+            else:
+                year_min = df['year'].min()
+                year_max = df['year'].max()
+        except Exception:
+            # Fallback to direct min/max if sampling fails
+            year_min = df['year'].min()
+            year_max = df['year'].max()
     else:
         year_min = df['year'].min()
         year_max = df['year'].max()
     
-    year_range = f"{year_min:.0f} - {year_max:.0f}"
+    if len(df) > 0:
+        year_range = f"{year_min:.0f} - {year_max:.0f}"
+    else:
+        year_range = "N/A"
     st.info(f"Date Range: {year_range}")
     
     # Quick summary charts
@@ -1281,10 +1311,10 @@ def show_overview(df):
         except Exception as e:
             st.error(f"Error calculating top commodities: {str(e)}")
             return
-        # Optimize string operations - use vectorized approach
-        top_commodities_df['commodity_label'] = top_commodities_df['commodity_description'].str[:75] + '...'
-        mask_long = top_commodities_df['commodity_description'].str.len() <= 75
-        top_commodities_df.loc[mask_long, 'commodity_label'] = top_commodities_df.loc[mask_long, 'commodity_description']
+        # Optimize string operations - use vectorized approach with NaN handling
+        top_commodities_df['commodity_label'] = top_commodities_df['commodity_description'].astype(str).str[:75] + '...'
+        mask_long = top_commodities_df['commodity_description'].astype(str).str.len() <= 75
+        top_commodities_df.loc[mask_long, 'commodity_label'] = top_commodities_df.loc[mask_long, 'commodity_description'].astype(str)
         top_commodities_df['value_billions'] = top_commodities_df['valuecif'] / 1e9
         fig = px.bar(
             top_commodities_df,
@@ -1620,8 +1650,21 @@ def show_geographic_analysis(df):
         return
     
     # Use unstack instead of pivot_table for better memory efficiency
-    port_country_pivot = (port_country_matrix.set_index(['ausport_description', 'country_description'])['valuecif']
-                         .unstack(fill_value=0) / 1e9)  # Convert to billions
+    # Handle potential duplicate indices by aggregating first
+    try:
+        port_country_indexed = port_country_matrix.set_index(['ausport_description', 'country_description'])['valuecif']
+        # Check for duplicates and aggregate if needed
+        if port_country_indexed.index.duplicated().any():
+            port_country_indexed = port_country_indexed.groupby(level=[0, 1]).sum()
+        port_country_pivot = port_country_indexed.unstack(fill_value=0) / 1e9  # Convert to billions
+    except Exception as e:
+        # Fallback to pivot_table if unstack fails
+        port_country_pivot = port_country_matrix.pivot_table(
+            index='ausport_description',
+            columns='country_description',
+            values='valuecif',
+            fill_value=0
+        ) / 1e9
     
     fig = px.imshow(
         port_country_pivot.values,
@@ -1723,10 +1766,10 @@ def show_commodity_analysis(df):
     st.subheader("Top Commodities by Value")
     
     top_commodities = commodity_stats.head(top_n).copy()
-    # Optimize string operations - use vectorized approach
-    top_commodities['commodity_label'] = top_commodities['commodity_description'].str[:75] + '...'
-    mask_long = top_commodities['commodity_description'].str.len() <= 75
-    top_commodities.loc[mask_long, 'commodity_label'] = top_commodities.loc[mask_long, 'commodity_description']
+    # Optimize string operations - use vectorized approach with NaN handling
+    top_commodities['commodity_label'] = top_commodities['commodity_description'].astype(str).str[:75] + '...'
+    mask_long = top_commodities['commodity_description'].astype(str).str.len() <= 75
+    top_commodities.loc[mask_long, 'commodity_label'] = top_commodities.loc[mask_long, 'commodity_description'].astype(str)
     top_commodities['value_billions'] = top_commodities['valuecif'] / 1e9
     
     fig = px.bar(
@@ -1749,10 +1792,10 @@ def show_commodity_analysis(df):
     st.subheader("Top Commodities by Weight")
     
     top_commodities_weight = commodity_stats.nlargest(top_n, 'weight').copy()
-    # Optimize string operations - use vectorized approach
-    top_commodities_weight['commodity_label'] = top_commodities_weight['commodity_description'].str[:75] + '...'
-    mask_long = top_commodities_weight['commodity_description'].str.len() <= 75
-    top_commodities_weight.loc[mask_long, 'commodity_label'] = top_commodities_weight.loc[mask_long, 'commodity_description']
+    # Optimize string operations - use vectorized approach with NaN handling
+    top_commodities_weight['commodity_label'] = top_commodities_weight['commodity_description'].astype(str).str[:75] + '...'
+    mask_long = top_commodities_weight['commodity_description'].astype(str).str.len() <= 75
+    top_commodities_weight.loc[mask_long, 'commodity_label'] = top_commodities_weight.loc[mask_long, 'commodity_description'].astype(str)
     top_commodities_weight['weight_millions'] = top_commodities_weight['weight'] / 1e6
     
     fig = px.bar(
@@ -1778,10 +1821,10 @@ def show_commodity_analysis(df):
     st.subheader("CIF vs FOB Comparison for Top Commodities")
     
     top_10_comm = commodity_stats.head(10).copy()
-    # Optimize string operations - use vectorized approach
-    top_10_comm['commodity_label'] = top_10_comm['commodity_description'].str[:75] + '...'
-    mask_long = top_10_comm['commodity_description'].str.len() <= 75
-    top_10_comm.loc[mask_long, 'commodity_label'] = top_10_comm.loc[mask_long, 'commodity_description']
+    # Optimize string operations - use vectorized approach with NaN handling
+    top_10_comm['commodity_label'] = top_10_comm['commodity_description'].astype(str).str[:75] + '...'
+    mask_long = top_10_comm['commodity_description'].astype(str).str.len() <= 75
+    top_10_comm.loc[mask_long, 'commodity_label'] = top_10_comm.loc[mask_long, 'commodity_description'].astype(str)
     
     fig = go.Figure()
     
@@ -2019,19 +2062,28 @@ def show_risk_analysis(df):
         else:
             return 'LOW RISK'
     
-    # Optimize risk classification - use vectorized approach
-    def classify_risk_vectorized(hhi, top_share):
-        conditions = [
-            (hhi >= 2500) | (top_share >= 50),
-            (hhi >= 1500) | (top_share >= 40)
-        ]
-        choices = ['HIGH RISK', 'MEDIUM RISK']
-        return np.select(conditions, choices, default='LOW RISK')
-    
-    concentration_analysis['risk_level'] = classify_risk_vectorized(
-        concentration_analysis['hhi_index'], 
-        concentration_analysis['top_country_share']
-    )
+    # Optimize risk classification - use vectorized approach with error handling
+    try:
+        def classify_risk_vectorized(hhi, top_share):
+            # Ensure we're working with numpy arrays
+            hhi = np.asarray(hhi)
+            top_share = np.asarray(top_share)
+            conditions = [
+                (hhi >= 2500) | (top_share >= 50),
+                (hhi >= 1500) | (top_share >= 40)
+            ]
+            choices = ['HIGH RISK', 'MEDIUM RISK']
+            return np.select(conditions, choices, default='LOW RISK')
+        
+        concentration_analysis['risk_level'] = classify_risk_vectorized(
+            concentration_analysis['hhi_index'], 
+            concentration_analysis['top_country_share']
+        )
+    except Exception as e:
+        # Fallback to apply if vectorized fails
+        concentration_analysis['risk_level'] = concentration_analysis.apply(
+            lambda x: classify_risk(x['hhi_index'], x['top_country_share']), axis=1
+        )
     
     # Risk distribution
     risk_counts = concentration_analysis['risk_level'].value_counts()
@@ -2059,10 +2111,10 @@ def show_risk_analysis(df):
         ].sort_values('hhi_index', ascending=False).head(15).copy()
         
         if len(high_risk) > 0:
-            # Optimize string operations - use vectorized approach
-            high_risk['commodity_label'] = high_risk['commodity_description'].str[:75] + '...'
-            mask_long = high_risk['commodity_description'].str.len() <= 75
-            high_risk.loc[mask_long, 'commodity_label'] = high_risk.loc[mask_long, 'commodity_description']
+            # Optimize string operations - use vectorized approach with NaN handling
+            high_risk['commodity_label'] = high_risk['commodity_description'].astype(str).str[:75] + '...'
+            mask_long = high_risk['commodity_description'].astype(str).str.len() <= 75
+            high_risk.loc[mask_long, 'commodity_label'] = high_risk.loc[mask_long, 'commodity_description'].astype(str)
             fig = px.bar(
                 high_risk,
                 x='hhi_index',
@@ -2087,11 +2139,21 @@ def show_risk_analysis(df):
     st.subheader("Commodity Dependence Index")
     
     # Optimize sum calculation for large datasets
-    if len(df) > 2000000:
-        sample_size = min(1000000, len(df))
-        sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
-        df_sample = df.loc[sample_indices]
-        total_import_value = df_sample['valuecif'].sum() * (len(df) / len(df_sample))
+    if len(df) == 0:
+        total_import_value = 0
+    elif len(df) > 2000000:
+        try:
+            sample_size = min(1000000, len(df))
+            sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
+            df_sample = df.loc[sample_indices]
+            if len(df_sample) > 0:
+                scale_factor = len(df) / len(df_sample)
+                total_import_value = df_sample['valuecif'].sum() * scale_factor
+            else:
+                total_import_value = df['valuecif'].sum()
+        except Exception:
+            # Fallback to direct sum if sampling fails
+            total_import_value = df['valuecif'].sum()
     else:
         total_import_value = df['valuecif'].sum()
     
@@ -2116,30 +2178,39 @@ def show_risk_analysis(df):
         else:
             return 'LOW'
     
-    # Optimize dependence classification - use vectorized approach
-    def classify_dependence_vectorized(pct, value_billions):
-        conditions = [
-            (pct >= 5.0) | (value_billions >= 40),
-            (pct >= 2.0) | (value_billions >= 15),
-            (pct >= 0.5) | (value_billions >= 4)
-        ]
-        choices = ['CRITICAL', 'HIGH', 'MODERATE']
-        return np.select(conditions, choices, default='LOW')
-    
-    commodity_dependence['dependence_level'] = classify_dependence_vectorized(
-        commodity_dependence['dependence_pct'],
-        commodity_dependence['total_value_billions']
-    )
+    # Optimize dependence classification - use vectorized approach with error handling
+    try:
+        def classify_dependence_vectorized(pct, value_billions):
+            # Ensure we're working with numpy arrays
+            pct = np.asarray(pct)
+            value_billions = np.asarray(value_billions)
+            conditions = [
+                (pct >= 5.0) | (value_billions >= 40),
+                (pct >= 2.0) | (value_billions >= 15),
+                (pct >= 0.5) | (value_billions >= 4)
+            ]
+            choices = ['CRITICAL', 'HIGH', 'MODERATE']
+            return np.select(conditions, choices, default='LOW')
+        
+        commodity_dependence['dependence_level'] = classify_dependence_vectorized(
+            commodity_dependence['dependence_pct'],
+            commodity_dependence['total_value_billions']
+        )
+    except Exception as e:
+        # Fallback to apply if vectorized fails
+        commodity_dependence['dependence_level'] = commodity_dependence.apply(
+            lambda x: classify_dependence(x['dependence_pct'], x['total_value_billions']), axis=1
+        )
     
     critical_high = commodity_dependence[
         commodity_dependence['dependence_level'].isin(['CRITICAL', 'HIGH'])
     ].sort_values('dependence_pct', ascending=False).head(20).copy()
     
     if len(critical_high) > 0:
-        # Optimize string operations - use vectorized approach
-        critical_high['commodity_label'] = critical_high['commodity_description'].str[:75] + '...'
-        mask_long = critical_high['commodity_description'].str.len() <= 75
-        critical_high.loc[mask_long, 'commodity_label'] = critical_high.loc[mask_long, 'commodity_description']
+        # Optimize string operations - use vectorized approach with NaN handling
+        critical_high['commodity_label'] = critical_high['commodity_description'].astype(str).str[:75] + '...'
+        mask_long = critical_high['commodity_description'].astype(str).str.len() <= 75
+        critical_high.loc[mask_long, 'commodity_label'] = critical_high.loc[mask_long, 'commodity_description'].astype(str)
         fig = px.bar(
             critical_high,
             x='dependence_pct',
@@ -2179,9 +2250,20 @@ def show_risk_analysis(df):
     # Optimize pivot operation - use unstack instead
     unique_years = country_yearly['year'].unique()
     if len(unique_years) >= 2:
-        country_pivot = (country_yearly.set_index(['country_description', 'year'])['valuecif']
-                        .unstack(fill_value=0)
-                        .reset_index())
+        try:
+            country_indexed = country_yearly.set_index(['country_description', 'year'])['valuecif']
+            # Check for duplicates and aggregate if needed
+            if country_indexed.index.duplicated().any():
+                country_indexed = country_indexed.groupby(level=[0, 1]).sum()
+            country_pivot = country_indexed.unstack(fill_value=0).reset_index()
+        except Exception as e:
+            # Fallback to pivot_table if unstack fails
+            country_pivot = country_yearly.pivot_table(
+                index='country_description',
+                columns='year',
+                values='valuecif',
+                fill_value=0
+            ).reset_index()
         
         year_cols = [col for col in country_pivot.columns if col != 'country_description']
         if len(year_cols) >= 2:
@@ -2204,15 +2286,15 @@ def show_risk_analysis(df):
                 growing = country_trends_filtered.nlargest(15, 'absolute_change').copy()
                 
                 declining['change_billions'] = declining['absolute_change'] / 1e9
-                # Optimize string operations - use vectorized approach
-                declining['country_label'] = declining['country'].str[:40] + '...'
-                mask_long = declining['country'].str.len() <= 40
-                declining.loc[mask_long, 'country_label'] = declining.loc[mask_long, 'country']
+                # Optimize string operations - use vectorized approach with NaN handling
+                declining['country_label'] = declining['country'].astype(str).str[:40] + '...'
+                mask_long = declining['country'].astype(str).str.len() <= 40
+                declining.loc[mask_long, 'country_label'] = declining.loc[mask_long, 'country'].astype(str)
                 
                 growing['change_billions'] = growing['absolute_change'] / 1e9
-                growing['country_label'] = growing['country'].str[:40] + '...'
-                mask_long = growing['country'].str.len() <= 40
-                growing.loc[mask_long, 'country_label'] = growing.loc[mask_long, 'country']
+                growing['country_label'] = growing['country'].astype(str).str[:40] + '...'
+                mask_long = growing['country'].astype(str).str.len() <= 40
+                growing.loc[mask_long, 'country_label'] = growing.loc[mask_long, 'country'].astype(str)
                 
                 col1, col2 = st.columns(2)
                 
