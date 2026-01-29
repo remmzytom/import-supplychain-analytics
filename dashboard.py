@@ -724,17 +724,36 @@ def load_data_from_file(file_path, max_rows=None):
                 if 'df' not in locals():
                     df = pd.concat(chunks, ignore_index=True)
                 else:
-                    df = pd.concat([df] + chunks, ignore_index=True)
+                    # Combine incrementally to avoid large intermediate lists
+                    for chunk in chunks:
+                        df = pd.concat([df, chunk], ignore_index=True)
                 chunks = []
                 import gc
                 gc.collect()
         
-        # Combine remaining chunks
+        # Combine remaining chunks - do it incrementally to avoid memory spikes
         if chunks:
             if 'df' not in locals():
-                df = pd.concat(chunks, ignore_index=True)
+                # No df exists - combine chunks in smaller batches
+                if len(chunks) > batch_size:
+                    # Start with first batch
+                    df = pd.concat(chunks[:batch_size], ignore_index=True)
+                    # Combine remaining chunks incrementally
+                    for i in range(batch_size, len(chunks)):
+                        df = pd.concat([df, chunks[i]], ignore_index=True)
+                        # Garbage collect every few chunks
+                        if (i - batch_size) % 3 == 0:
+                            import gc
+                            gc.collect()
+                else:
+                    df = pd.concat(chunks, ignore_index=True)
             else:
-                df = pd.concat([df] + chunks, ignore_index=True)
+                # df exists - combine remaining chunks incrementally
+                for chunk in chunks:
+                    df = pd.concat([df, chunk], ignore_index=True)
+            # Final cleanup
+            import gc
+            gc.collect()
         
         # Final memory optimization
         import gc
