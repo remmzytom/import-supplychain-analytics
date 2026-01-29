@@ -195,6 +195,7 @@ def _load_data_from_gcs_internal(show_progress=False):
             json.dump(credentials_dict, creds_file)
             creds_path = creds_file.name
         
+        tmp_path = None
         try:
             # Initialize GCS client with credentials
             client = storage.Client.from_service_account_json(creds_path)
@@ -229,10 +230,16 @@ def _load_data_from_gcs_internal(show_progress=False):
         finally:
             # Clean up credentials file
             if os.path.exists(creds_path):
-                os.unlink(creds_path)
+                try:
+                    os.unlink(creds_path)
+                except Exception:
+                    pass
             # Clean up data file after loading
-            if 'tmp_path' in locals() and os.path.exists(tmp_path):
-                os.unlink(tmp_path)
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
                 
     except Exception as e:
         if show_progress:
