@@ -142,9 +142,10 @@ def _get_max_rows_limit():
             limit = None
 
     if limit is None:
-        runtime_env = os.getenv("STREAMLIT_RUNTIME_ENV", "").lower()
-        if runtime_env == "cloud":
-            limit = 1500000
+        # Default: Load all data (no limit)
+        # For Streamlit Cloud, this might cause memory issues with very large datasets
+        # User can set STREAMLIT_MAX_ROWS environment variable to limit
+        limit = None
 
     if limit is not None and limit <= 0:
         return None
@@ -674,7 +675,7 @@ def load_data_from_file(file_path, max_rows=None):
     chunk_size = 100000
     chunks = []
     total_rows = 0
-    batch_size = 5
+    batch_size = 3  # Reduced from 5 to combine more frequently and use less memory
     
     try:
         # Load data in chunks
@@ -701,16 +702,20 @@ def load_data_from_file(file_path, max_rows=None):
                     break
             
             # Optimize data types immediately to reduce memory
-            if 'year' in chunk.columns:
-                chunk['year'] = pd.to_numeric(chunk['year'], downcast='integer')
-            if 'month_number' in chunk.columns:
-                chunk['month_number'] = pd.to_numeric(chunk['month_number'], downcast='integer')
-            
-            # Optimize float columns
-            float_cols = ['valuecif', 'valuefob', 'weight', 'quantity']
-            for col in float_cols:
-                if col in chunk.columns:
-                    chunk[col] = pd.to_numeric(chunk[col], downcast='float')
+            try:
+                if 'year' in chunk.columns:
+                    chunk['year'] = pd.to_numeric(chunk['year'], downcast='integer', errors='coerce')
+                if 'month_number' in chunk.columns:
+                    chunk['month_number'] = pd.to_numeric(chunk['month_number'], downcast='integer', errors='coerce')
+                
+                # Optimize float columns
+                float_cols = ['valuecif', 'valuefob', 'weight', 'quantity']
+                for col in float_cols:
+                    if col in chunk.columns:
+                        chunk[col] = pd.to_numeric(chunk[col], downcast='float', errors='coerce')
+            except Exception as opt_error:
+                # If optimization fails, continue with chunk as-is
+                pass
             
             chunks.append(chunk)
             total_rows += len(chunk)
@@ -724,33 +729,25 @@ def load_data_from_file(file_path, max_rows=None):
                 if 'df' not in locals():
                     df = pd.concat(chunks, ignore_index=True)
                 else:
-                    # Combine incrementally to avoid large intermediate lists
-                    for chunk in chunks:
-                        df = pd.concat([df, chunk], ignore_index=True)
+                    # Combine batch at once (more efficient than incremental)
+                    batch_df = pd.concat(chunks, ignore_index=True)
+                    df = pd.concat([df, batch_df], ignore_index=True)
+                    del batch_df  # Free memory immediately
                 chunks = []
                 import gc
                 gc.collect()
         
-        # Combine remaining chunks - do it incrementally to avoid memory spikes
+        # Combine remaining chunks - use batch approach for efficiency
         if chunks:
             if 'df' not in locals():
-                # No df exists - combine chunks in smaller batches
-                if len(chunks) > batch_size:
-                    # Start with first batch
-                    df = pd.concat(chunks[:batch_size], ignore_index=True)
-                    # Combine remaining chunks incrementally
-                    for i in range(batch_size, len(chunks)):
-                        df = pd.concat([df, chunks[i]], ignore_index=True)
-                        # Garbage collect every few chunks
-                        if (i - batch_size) % 3 == 0:
-                            import gc
-                            gc.collect()
-                else:
-                    df = pd.concat(chunks, ignore_index=True)
+                # No df exists - combine all chunks at once (should be fine if < batch_size)
+                df = pd.concat(chunks, ignore_index=True)
             else:
-                # df exists - combine remaining chunks incrementally
-                for chunk in chunks:
-                    df = pd.concat([df, chunk], ignore_index=True)
+                # df exists - combine remaining chunks in one batch
+                if len(chunks) > 0:
+                    batch_df = pd.concat(chunks, ignore_index=True)
+                    df = pd.concat([df, batch_df], ignore_index=True)
+                    del batch_df  # Free memory immediately
             # Final cleanup
             import gc
             gc.collect()
