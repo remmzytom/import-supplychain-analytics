@@ -1323,30 +1323,22 @@ def show_time_series(df):
     
     # Monthly trends - optimize for large datasets
     try:
-        if len(df) > 2000000:
-            # Sample for faster groupby on very large datasets
-            sample_size = min(2000000, len(df))
-            sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
-            df_sample = df.loc[sample_indices]
-            monthly_stats = df_sample.groupby(['year', 'month_number', 'month']).agg({
+        # Use optimized groupby helper function for better memory efficiency
+        monthly_stats = _optimize_groupby_for_large_df(
+            df,
+            ['year', 'month_number', 'month'],
+            {
                 'valuefob': 'sum',
                 'valuecif': 'sum',
                 'weight': 'sum',
                 'quantity': 'sum'
-            }).reset_index()
-            # Scale up the sums to approximate full dataset (if sampling)
-            scale_factor = len(df) / len(df_sample)
-            for col in ['valuefob', 'valuecif', 'weight', 'quantity']:
-                monthly_stats[col] = monthly_stats[col] * scale_factor
-        else:
-            monthly_stats = df.groupby(['year', 'month_number', 'month']).agg({
-                'valuefob': 'sum',
-                'valuecif': 'sum',
-                'weight': 'sum',
-                'quantity': 'sum'
-            }).reset_index()
+            }
+        )
     except Exception as e:
         st.error(f"Error calculating time series: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
         return
     
     monthly_stats = monthly_stats.sort_values(['year', 'month_number'])
@@ -1404,30 +1396,22 @@ def show_time_series(df):
     st.subheader("Year-over-Year Comparison")
     
     try:
-        if len(df) > 2000000:
-            # Sample for faster groupby
-            sample_size = min(2000000, len(df))
-            sample_indices = np.random.choice(df.index, size=sample_size, replace=False)
-            df_sample = df.loc[sample_indices]
-            yearly_stats = df_sample.groupby('year').agg({
+        # Use optimized groupby helper function for better memory efficiency
+        yearly_stats = _optimize_groupby_for_large_df(
+            df,
+            'year',
+            {
                 'valuefob': 'sum',
                 'valuecif': 'sum',
                 'weight': 'sum',
                 'quantity': 'sum'
-            }).reset_index()
-            # Scale up to approximate full dataset
-            scale_factor = len(df) / len(df_sample)
-            for col in ['valuefob', 'valuecif', 'weight', 'quantity']:
-                yearly_stats[col] = yearly_stats[col] * scale_factor
-        else:
-            yearly_stats = df.groupby('year').agg({
-                'valuefob': 'sum',
-                'valuecif': 'sum',
-                'weight': 'sum',
-                'quantity': 'sum'
-            }).reset_index()
+            }
+        )
     except Exception as e:
         st.error(f"Error calculating yearly stats: {str(e)}")
+        import traceback
+        with st.expander("Show error details"):
+            st.code(traceback.format_exc())
         return
     
     if len(yearly_stats) > 1:
