@@ -640,19 +640,12 @@ def query_bigquery(filters=None, limit_rows=None):
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], downcast='float')
             
-            # Add industry sector if not present
-            if 'industry_sector' not in df.columns:
-                if COMMODITY_MAPPING_AVAILABLE:
-                    df['industry_sector'] = df['commodity_code'].apply(map_commodity_code_to_sitc_industry)
-                else:
-                    df['industry_sector'] = "Unknown"
-            
-            # Create date column for time series
-            if 'year' in df.columns and 'month_number' in df.columns:
-                df['date'] = pd.to_datetime(
-                    df['year'].astype(str) + '-' + 
-                    df['month_number'].astype(str).str.zfill(2) + '-01'
-                )
+            # NOTE: We intentionally do NOT create 'industry_sector' or 'date' columns here
+            # These are expensive operations on 4.48M rows that cause memory crashes.
+            # Instead, they are created on-demand in the visualization functions:
+            # - 'date' column: Created in show_time_series() for aggregated monthly_stats only (~24 rows)
+            # - 'industry_sector' column: Created in show_value_volume_analysis() and show_commodity_analysis()
+            #   using optimized approaches (unique codes mapping)
             
             return df
             
@@ -741,20 +734,12 @@ def load_data_from_file(file_path, max_rows=None):
         import gc
         gc.collect()
         
-        # Add industry sector if not present (do this efficiently)
-        if 'industry_sector' not in df.columns:
-            if COMMODITY_MAPPING_AVAILABLE:
-                # Process in batches to avoid memory spike
-                df['industry_sector'] = df['commodity_code'].apply(map_commodity_code_to_sitc_industry)
-            else:
-                df['industry_sector'] = "Unknown"
-        
-        # Create date column for time series
-        if 'year' in df.columns and 'month_number' in df.columns:
-            df['date'] = pd.to_datetime(
-                df['year'].astype(str) + '-' + 
-                df['month_number'].astype(str).str.zfill(2) + '-01'
-            )
+        # NOTE: We intentionally do NOT create 'industry_sector' or 'date' columns here
+        # These are expensive operations on 4.48M rows that cause memory crashes.
+        # Instead, they are created on-demand in the visualization functions:
+        # - 'date' column: Created in show_time_series() for aggregated monthly_stats only (~24 rows)
+        # - 'industry_sector' column: Created in show_value_volume_analysis() and show_commodity_analysis()
+        #   using optimized approaches (unique codes mapping)
         
         return df
     
@@ -1858,6 +1843,19 @@ def show_commodity_analysis(df):
     
     # SITC Industry Analysis
     st.subheader("SITC-Based Industry Analysis")
+    
+    # Create industry_sector if not present (only when needed for this visualization)
+    if 'industry_sector' not in df.columns:
+        if COMMODITY_MAPPING_AVAILABLE:
+            # For large datasets, use optimized approach with unique codes
+            if len(df) > 2000000:
+                unique_codes = df['commodity_code'].unique()
+                code_to_sector = {code: map_commodity_code_to_sitc_industry(code) for code in unique_codes}
+                df['industry_sector'] = df['commodity_code'].map(code_to_sector)
+            else:
+                df['industry_sector'] = df['commodity_code'].apply(map_commodity_code_to_sitc_industry)
+        else:
+            df['industry_sector'] = "Unknown"
     
     if 'industry_sector' in df.columns:
         try:
